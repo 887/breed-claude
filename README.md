@@ -1,15 +1,28 @@
 # breed-claude
 
-A user-level [Claude Code](https://claude.com/claude-code) skill for spawning a fresh Claude instance in a detached `tmux` session with a personality preloaded and `--remote-control` open. Hands back a `https://claude.ai/code/session_…` URL the user can connect to from any browser.
+A user-level [Claude Code](https://claude.com/claude-code) skill for two pet-operations on headless Claude instances:
 
-Useful when you want a second (or third, or fifth) Claude running in parallel, each in its own character, each independently attachable.
+- **Breed** — spawn a fresh Claude in a detached `tmux` session with a personality preloaded and `--remote-control` open. Hands back a `https://claude.ai/code/session_…` URL the user can connect to from any browser.
+- **Heel** — recover an existing spawn whose remote-control bridge has gone idle. The Claude binary stays alive; only the bridge is re-established. Pun intended: heel = pet-discipline command (come to the master's side) AND a homophone for heal (sick pet → healed). Both readings hold.
+
+Useful when you want several Claudes running in parallel, each in its own character, each independently attachable — and a quick way to revive the ones that lapse.
 
 ## Trigger phrases
+
+### Breed (spawn a new one)
 
 - *"breed me a new Claude with the lion personality"*
 - *"spawn a wolf claude"*
 - *"fork me a tiger"*
 - *"give me a fresh claude with the bunny personality"*
+
+### Heel (recover an inactive one)
+
+- *"heel my bunny"*
+- *"heel my lion"*
+- *"heel them"*
+- *"the wolf went inactive, fix it"*
+- *"my tiger isn't showing in the remote-control app"*
 
 ## Install
 
