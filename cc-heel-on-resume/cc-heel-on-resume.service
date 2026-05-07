@@ -1,0 +1,24 @@
+[Unit]
+Description=Heel Claude Code /remote-control on every resume from suspend
+Documentation=https://github.com/anthropics/claude-code/issues/34255
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/cc-heel-watcher
+Restart=always
+RestartSec=5
+# dbus-monitor exits if the system bus restarts; the watcher restarts
+# itself with a 5s backoff which is enough for transient bus blips.
+
+# Hardening: read-only filesystem view except for the user runtime dir
+# (where the tmux socket lives) and a couple of obvious user paths the
+# heel script touches transitively.
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%t %h/.local/bin
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

@@ -49,6 +49,28 @@ Given a personality name `<P>`:
 
 Multiple spawns coexist — name conflicts get a numeric suffix (`<P>-spawn-2`, `-3`, …).
 
+## Bonus: auto-heel on every resume from suspend
+
+A companion systemd user service that runs the `heel` operation automatically on every wake-from-suspend, so your spawned Claudes reconnect themselves before you even check the remote-control app.
+
+Lives in [`cc-heel-on-resume/`](./cc-heel-on-resume/). One-command install:
+
+```bash
+~/.claude/skills/breed-claude/cc-heel-on-resume/install.sh
+```
+
+The script symlinks the unit file into `~/.config/systemd/user/`, the two helper scripts into `~/.local/bin/`, then `daemon-reload` + `enable --now`. Idempotent — re-runs replace symlinks cleanly. Pre-existing non-symlink files at the target paths are backed up with a `.bak.<timestamp>` suffix.
+
+Verify by suspending + waking the machine once and checking:
+
+```bash
+journalctl -t cc-heel-watcher --since '1 hour ago' --no-pager
+```
+
+Two lines should appear: `pre-sleep signal, nothing to do` (at suspend) and `resume detected, invoking heel` (at wake).
+
+Why it exists: Claude's own remote-control reconnect is broken upstream ([issue #34255](https://github.com/anthropics/claude-code/issues/34255)). The kernel tears every TCP socket down on suspend; CC doesn't redial on resume. This service is the workaround until that lands.
+
 ## License
 
 MIT.

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# cc-heel-watcher — watch the system bus for logind's PrepareForSleep
+# signal; on resume (boolean false) invoke cc-heel-all.
+#
+# Uses `gdbus monitor` rather than `dbus-monitor`. dbus-monitor calls
+# org.freedesktop.DBus.Monitoring.BecomeMonitor, which is privileged
+# and AccessDenied for unprivileged users — it falls back to
+# AddMatch eavesdrop=true, which is deprecated and brittle to dbus
+# policy updates. gdbus uses a normal AddMatch client subscription;
+# PrepareForSleep is broadcast, so no special privilege is needed.
+#
+# Runs as the user (under user-systemd), so cc-heel-all sees the user's
+# tmux socket directly via $XDG_RUNTIME_DIR. Bus access is read-only;
+# we only listen, never call.
+
+set -euo pipefail
+
+LOG_TAG="cc-heel-watcher"
+log() { logger -t "$LOG_TAG" -- "$*"; }
+
+HEEL_SCRIPT="${CC_HEEL_SCRIPT:-$HOME/.local/bin/cc-heel-all}"
+
+if [[ ! -x "$HEEL_SCRIPT" ]]; then
+  log "heel script not executable at $HEEL_SCRIPT, refusing to start"
+  exit 1
+fi
+
+log "watcher up; tracking org.freedesktop.login1.Manager.PrepareForSleep"
+
+# gdbus monitor emits one line per signal, GVariant-formatted, e.g.:
+#   /org/freedesktop/login1: org.freedesktop.login1.Manager.PrepareForSleep (false,)
+# The first couple of banner lines ("Monitoring signals on object ...",
+# "The name ... is owned by :1.N") are skipped by the case below since
+# they don't match PrepareForSleep.
+gdbus monitor --system \
+  --dest org.freedesktop.login1 \
+  --object-path /org/freedesktop/login1 \
+  | while read -r line; do
+      case "$line" in
+        *PrepareForSleep*false*)
+          log "resume detected, invoking heel"
+          "$HEEL_SCRIPT" || log "heel exited non-zero: $?"
+          ;;
+        *PrepareForSleep*true*)
+          # Pre-sleep — sockets about to die. Nothing to do; logged for audit.
+          log "pre-sleep signal, nothing to do"
+          ;;
+      esac
+    done

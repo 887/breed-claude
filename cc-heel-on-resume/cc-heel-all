@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# cc-heel-all — re-establish /remote-control on every tmux pane running
+# `claude` whose websocket bridge has dropped (typically post-suspend).
+#
+# Detection: a healthy CC session holds at least one ESTABLISHED outbound
+# TCP socket (the remote-control websocket and/or in-flight model
+# requests). After suspend, the kernel tears every socket down; CC's own
+# reconnect path is broken upstream
+# (https://github.com/anthropics/claude-code/issues/34255 et al.) so on
+# resume we look for `claude` pids with zero established sockets and
+# heel them by sending Esc -> Ctrl-U -> /remote-control -> Enter into
+# their owning tmux pane.
+#
+# Idempotent: a pane whose claude pid still holds an established socket
+# is left untouched. Safe to invoke at any time.
+
+set -euo pipefail
+
+LOG_TAG="cc-heel-all"
+log() { logger -t "$LOG_TAG" -- "$*"; }
+
+# Wait for network to actually be back. Resume + DHCP/wifi reassociation
+# can easily take 5+ seconds; CC won't have anywhere to dial until then.
+SETTLE_SECONDS="${CC_HEEL_SETTLE_SECONDS:-8}"
+sleep "$SETTLE_SECONDS"
+
+# Bail fast if there's no tmux server — nothing to heel.
+if ! tmux list-sessions >/dev/null 2>&1; then
+  log "no tmux server, exit"
+  exit 0
+fi
+
+# Recursive descendants of a pid (inclusive of the pid itself).
+descendants() {
+  local p=$1
+  printf '%s\n' "$p"
+  local c
+  for c in $(pgrep -P "$p" 2>/dev/null || true); do
+    descendants "$c"
+  done
+}
+
+# Snapshot ss output once — saves N forks across many panes.
+SS_SNAPSHOT="$(ss -tnp 2>/dev/null || true)"
+
+checked=0
+heeled=0
+skipped_alive=0
+
+while IFS=' ' read -r pane root_pid; do
+  # Find a `claude` descendant of the pane's leaf process.
+  claude_pid=""
+  for pid in $(descendants "$root_pid"); do
+    comm="$(ps -o comm= -p "$pid" 2>/dev/null || true)"
+    if [[ "$comm" == claude* || "$comm" == node ]]; then
+      # `node` here catches the case where claude is invoked as a node
+      # subprocess; we double-check by looking at the cmdline.
+      cmdline="$(tr '\0' ' ' </proc/"$pid"/cmdline 2>/dev/null || true)"
+      if [[ "$cmdline" == *claude* ]]; then
+        claude_pid="$pid"
+        break
+      fi
+    fi
+  done
+  [[ -z "$claude_pid" ]] && continue
+
+  checked=$((checked + 1))
+
+  if printf '%s\n' "$SS_SNAPSHOT" | grep -E "ESTAB.*pid=$claude_pid," >/dev/null; then
+    log "pane=$pane claude_pid=$claude_pid: socket alive, skip"
+    skipped_alive=$((skipped_alive + 1))
+    continue
+  fi
+
+  log "pane=$pane claude_pid=$claude_pid: no established socket, heeling"
+  tmux send-keys -t "$pane" Escape
+  tmux send-keys -t "$pane" C-u
+  tmux send-keys -t "$pane" '/remote-control' Enter
+  heeled=$((heeled + 1))
+done < <(tmux list-panes -a -F '#{pane_id} #{pane_pid}')
+
+log "done: checked=$checked heeled=$heeled skipped_alive=$skipped_alive"
