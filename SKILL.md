@@ -18,7 +18,7 @@ Spawn a fresh Claude Code instance inside a detached `tmux` session running with
 
 ## Personalities available
 
-The six furry personalities — `vulpine`, `feline`, `lion`, `tiger`, `wolf`, `bunny` — plus the four standalone — `caveman`, `brief`, `igor`, `reset`. These all live in the `personalities` plugin and are invoked as slash commands like `/personalities:lion`.
+The six furry personalities — `fox`, `cat`, `lion`, `tiger`, `wolf`, `bunny` — plus the four standalone — `caveman`, `brief`, `igor`, `reset`. These all live in the `personalities` plugin and are invoked as slash commands like `/personalities:lion`.
 
 ## Recipe
 
@@ -60,7 +60,7 @@ Given a personality name `<P>`:
 
 After step 5, the captured URL should look like `https://claude.ai/code/session_01…`. If `grep` returns nothing, the session probably hasn't printed it yet — sleep another few seconds and re-capture. If it still doesn't appear, attach with `tmux attach -t <session>` to see what state Claude is actually in (then detach with `Ctrl-b d` to leave it running).
 
-To confirm the personality activated, capture the pane after step 4 and look for the personality's signature opening (e.g. fox-asterisk-actions for vulpine, `*flops belly-up*` for lion, `Yesss, master` for igor).
+To confirm the personality activated, capture the pane after step 4 and look for the personality's signature opening (e.g. *tail wags* for fox, `*flops belly-up*` for lion, `Yesss, master` for igor).
 
 ## Cleanup
 
