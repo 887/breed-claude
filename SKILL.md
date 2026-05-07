@@ -26,28 +26,44 @@ Given a personality name `<P>`:
 
 1. **Pick a tmux session name.** Default: `<P>-spawn`. If `tmux has-session -t <P>-spawn` succeeds, append a numeric suffix (`<P>-spawn-2`, `<P>-spawn-3`, …) until you find a free name. Don't reuse or kill an existing one unless the user explicitly asks.
 
-2. **Launch the spawn:**
-   ```bash
-   tmux new-session -d -s <session> "claude --remote-control"
-   ```
-   Detached (`-d`) + the pseudo-TTY tmux gives are both required. The `--remote-control` flag opens a browser-connectable session and prints a `https://claude.ai/code/session_…` URL on startup.
+2. **Compute the display name.** Format: `<P> (home-<dash-joined-path>)`. The path is the current working directory with `$HOME` substituted as literal `home` — that strips the username and keeps the name short, stable, and cross-platform-compatible (Linux / macOS / Windows git-bash all see `$HOME` the same way). The display name is what shows in the remote-control app, the prompt box, the `/resume` picker, and the terminal title — so the user can tell their spawns apart at a glance instead of squinting at `<host>-stateful-foo` auto-names.
 
-3. **Wait ~5 seconds** for Claude to finish its startup banner and be ready to accept input.
+   ```bash
+   display_path="${PWD/#$HOME/home}"
+   display_path="${display_path//\//-}"
+   display_path="${display_path#-}"
+   display_name="<P> (${display_path})"
+   ```
+
+   Examples:
+   - `$HOME=/home/laragana`, `PWD=/home/laragana/workspace` → `bat (home-workspace)`
+   - `PWD=/home/laragana/workspace/personalities` → `bat (home-workspace-personalities)`
+   - `PWD=$HOME` exactly → `bat (home)`
+   - `PWD` outside `$HOME` (rare) → falls back to dash-joined absolute path; substitution simply doesn't fire and the leading dash is stripped.
+
+3. **Launch the spawn:**
+   ```bash
+   tmux new-session -d -s <session> -- claude --remote-control --name "$display_name"
+   ```
+   Detached (`-d`) + the pseudo-TTY tmux gives are both required. The `--` separates tmux options from the command-to-run so the multi-word `--name` arg passes through cleanly without shell-quoting gymnastics. `--remote-control` opens a browser-connectable session and prints a `https://claude.ai/code/session_…` URL on startup. `--name` pre-sets the display name so the user sees `<P> (home-…)` instead of the auto-generated default.
+
+4. **Wait ~5 seconds** for Claude to finish its startup banner and be ready to accept input.
    ```bash
    sleep 5
    ```
 
-4. **Activate the personality** by sending the slash command into the tmux session:
+5. **Activate the personality** by sending the slash command into the tmux session:
    ```bash
    tmux send-keys -t <session> "/personalities:<P>" Enter
    ```
+   If the spawn responds with `Unknown command: /personalities:<P>` (the marketplace cache hasn't picked up the personality yet), send `/reload-plugins` first, sleep 3s, then re-send the personality activation.
 
-5. **Capture the remote-control session URL:**
+6. **Capture the remote-control session URL:**
    ```bash
    tmux capture-pane -t <session> -p | grep -oE "https://claude.ai/code/session_[A-Za-z0-9]+" | head -1
    ```
 
-6. **Report back to the user** with: the personality, the tmux session name, and the session URL. Example: `lion-spawn → https://claude.ai/code/session_01ABC…`. The user clicks the URL to chat with the new Claude.
+7. **Report back to the user** with: the personality, the tmux session name, the display name, and the session URL. Example: `bat-spawn (display: "bat (home-workspace)") → https://claude.ai/code/session_01ABC…`. The user clicks the URL to chat with the new Claude; the display name is what they see in the remote-control app.
 
 ## Hard rules — don't break these
 
