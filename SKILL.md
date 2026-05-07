@@ -1,16 +1,33 @@
 ---
 name: breed-claude
-description: Two pet-operations on headless Claude Code instances. (1) BREED — spawn a fresh Claude in a detached tmux session with a personality preloaded, returning the remote-control session URL. Use when the user says "breed me a new Claude with the X personality", "spawn a Y claude", "fork me a Z claude", "give me a fresh claude with personality Z". (2) HEEL — recover an existing spawn that's gone idle and stopped appearing in the Claude remote-control app. Heel re-establishes the remote-control bridge by sending Esc → clearing pending input → re-running /remote-control inside the tmux session, then reports the new URL. Use when the user says "heel my X" / "heel my bunny" / "heel my lion" / "heel them" / refers to a Claude session being inactive, sleeping, lapsed, not showing in the remote-control app, or otherwise needing to be brought back to attention.
+description: Five pet-operations on headless Claude Code instances. (1) BREED — spawn a fresh Claude in a detached tmux session with a personality preloaded, returning the remote-control session URL. Use when the user says "breed me a new Claude with the X personality", "spawn a Y claude", "fork me a Z claude", "give me a fresh claude with personality Z". (2) HEEL — recover an existing spawn that's gone idle and stopped appearing in the Claude remote-control app. Heel re-establishes the remote-control bridge by sending Esc → clearing pending input → re-running /remote-control inside the tmux session, then reports the new URL. Use when the user says "heel my X" / "heel my bunny" / "heel my lion" / "heel them" / refers to a Claude session being inactive, sleeping, lapsed, not showing in the remote-control app, or otherwise needing to be brought back to attention. (3) RESUME / BREED-OR-RESUME — find an existing Claude conversation by personality name (live tmux, live non-tmux'd process, or dead-on-disk session log) and re-attach it to a fresh tmux session via `--resume <id>`, optionally falling back to a fresh BREED if no match is found. Use when the user says "resume my X", "breed and resume my X", "get my fox back", "find my Y / breed if not there". (4) PACK-RELOAD — send /reload-plugins + /personalities:<P> to every spawned animal session (skipping the SELF session — never reload yourself). Use when the user says "pack-reload", "reload the pack", "reload all the animals", "reload everyone" — typically after a personalities-repo push so each spawn picks up the new content. (5) DELEGATE-RELOAD — when an animal cannot reload itself (rule: don't touch yourself when you ARE that animal), pick a "free" animal (any other live spawn) and instruct it to perform the reload sequence on the target — including an optional final relay message ("resume the RP", "report status", etc.). Use when the user says "have tiger reload bat", "round-trip bat via tiger", "tiger update bat", "delegate-reload <target> via <delegate>".
 ---
 
 # breed-claude
 
-Two pet-operations on headless Claude Code instances:
+Five pet-operations on headless Claude Code instances:
 
 1. **Breed** — spawn a fresh Claude inside a detached `tmux` session with `--remote-control` and a personality preloaded.
 2. **Heel** — recover an existing spawn whose remote-control bridge has gone inactive.
+3. **Resume** (and **Breed-or-Resume**) — find an existing Claude conversation by personality name and re-attach it to a fresh tmux session via `--resume <id>`. Useful when the original tmux session was killed, or the Claude was started outside tmux (plain terminal, konsole, etc.) and needs to be properly tmux'd.
+4. **Pack-reload** — send `/reload-plugins` + `/personalities:<P>` to every spawned animal session in the pack (always skipping the SELF session). Used after a personalities-repo push so each spawn picks up the new content.
+5. **Delegate-reload** — round-trip pattern: when an animal cannot reload itself (the SELF rule — don't touch yourself when you ARE that animal), pick a "free" animal and instruct it to perform the reload sequence on the target, optionally with a final relay message.
 
-Multiple spawns coexist (one tmux session each). Heel is non-destructive — the Claude binary stays alive, only the remote-control connection is re-established.
+Multiple spawns coexist (one tmux session each). Heel is non-destructive — the Claude binary stays alive, only the remote-control connection is re-established. Resume IS destructive to the source process (it kills the original Claude and re-launches it inside tmux with `--resume`) — but the conversation state is preserved on disk. Pack-reload and Delegate-reload are non-destructive — they only send slash commands.
+
+## The SELF rule — do not touch yourself
+
+When you (the model running this skill) ARE one of the animals in the pack — e.g. you're the bat, sitting in `bat-spawn`, and the user asks for a pack-reload — **do not reload yourself**. Reloading yourself mid-conversation drops the active personality, can lose context, and (per the user's explicit feedback) violates the "don't touch yourself when you're the animal" pet-discipline rule that grounds this whole skill.
+
+Pack-reload SKIPS the SELF session. Delegate-reload exists specifically so the SELF session can be reloaded by *another* animal in the pack on the user's behalf — round-trip, never self-loop.
+
+To detect the SELF session inside any of these recipes:
+
+```bash
+SELF=$(tmux display-message -p '#S' 2>/dev/null || echo "")
+# SELF is the tmux session name of the currently-running Claude.
+# Skip it in any iteration over pack sessions.
+```
 
 # BREED — spawn a fresh Claude
 
@@ -174,3 +191,240 @@ When the user says *"heel my bunny"* / *"heel my X"* / *"heel them"* / *"X is in
 2. Run the recipe above.
 3. Report: `**<session>** → <new-url>` plus the cleared-input note.
 4. That's it. Don't editorialize, don't ask follow-ups unless something failed.
+
+---
+
+# RESUME — re-attach a Claude conversation by personality name
+
+Find an existing Claude conversation that belongs to personality `<P>` and re-launch it inside a fresh tmux session via `--resume <id> --remote-control --name "<P> (...)"`.
+
+Use this when:
+
+- The original tmux session was killed (or never existed — Claude was started in a plain terminal/konsole).
+- The Claude binary was running outside tmux (no `--remote-control` bridge) and the user wants it tmux'd properly.
+- The Claude binary died (crash, host reboot) and the session log on disk needs to be brought back to life.
+
+**RESUME is destructive to the source process** — it kills the existing Claude (if any) and re-launches it. The on-disk conversation state is preserved by `--resume`. Use HEEL for live-tmux'd Claudes that are merely idle in the bridge.
+
+## Discovery — finding the session by `<P>`
+
+Walk this ladder until a target is identified. **Always confirm with the user before acting** if the chosen target looks ambiguous (multiple matches at the same rung, recently-modified files belonging to other animals, etc.).
+
+1. **Live tmux session named `<P>-spawn`.** If `tmux has-session -t <P>-spawn` succeeds AND its claude pane process is alive — recommend HEEL, not RESUME. The session is already where the user wants it.
+
+2. **Live tmux session matching `<P>-*-spawn` or `<P>-spawn-N`.** Legacy parent-naming convention (e.g. `bunny-fox-spawn` = bunny bred from fox) used to be common. Scan `tmux ls` for sessions starting with `<P>-`. **Note:** the rename of legacy `<P>-<parent>-spawn` → `<P>-spawn` is non-destructive (`tmux rename-session -t <old> <new>` doesn't touch the running claude inside) — offer to rename if multiple legacy sessions clutter the namespace.
+
+3. **Live `claude` process with `--name "<P> (..."`.** Run:
+   ```bash
+   ps -ef | grep -E "claude.*--name [\"']?<P> " | grep -v grep
+   ```
+   This catches Claudes started in plain terminals (konsole, gnome-terminal, alacritty, etc.) outside tmux. If found:
+   - If the process is healthy AND the user wants it in tmux — proceed to RESUME (kill + relaunch).
+   - The session ID can be read from `--resume <id>` in cmdline if present, else from the Claude's open jsonl (see below).
+
+4. **Live `claude` process whose conversation log is most-recently-touched and contains `<P>`-coded markers.** When `--name` isn't set on the process cmdline (older Claudes started without that flag, or `--resume <named-token>` aliases), find the conversation log by:
+   ```bash
+   # Find the project dir for the workspace the process is in
+   readlink /proc/<pid>/cwd
+   # → /home/laragana/workspace
+   project_dir=$(echo "$cwd" | sed 's|/|-|g')
+   # → -home-laragana-workspace
+   # Find the most recently modified jsonl in that project — biggest current writer
+   ls -t ~/.claude/projects/<project_dir>/*.jsonl | head -3
+   # Verify <P>-coded content (personality activation, animal-coded vocab):
+   grep -c '"/personalities:<P>"\|<P>-coded-marker' <jsonl>
+   ```
+   The "high count" file is the live conversation; lower-count files are sibling agents whose logs cross-reference each other.
+
+5. **Dead session, jsonl on disk.** If no live process matches, scan the project dir for jsonls activating `<P>`:
+   ```bash
+   grep -l '"/personalities:<P>"' ~/.claude/projects/-home-<workspace>/*.jsonl
+   ```
+   Pick by most recently modified mtime. **Disambiguation gotcha:** a single conversation can switch personalities multiple times. The "what was the last active personality" answer requires reading the *last* `/personalities:` activation in the file, not just any. If multiple files match with different `<P>` activations, ask the user which session they mean.
+
+6. **Ask.** If none of the above produce a clear match — list candidates and offer to BREED fresh.
+
+## Recipe
+
+Given personality `<P>` (and optionally an explicit session ID `<id>`, workspace `<dir>`):
+
+1. **Discover** as above. Decide between HEEL (live tmux'd target), RESUME (live non-tmux'd or dead-on-disk target), or BREED (no target).
+
+2. **For non-tmux'd live Claude — kill cleanly first:**
+   ```bash
+   kill -TERM <pid>
+   sleep 2
+   ps -p <pid> -o pid= 2>/dev/null && echo "still alive — escalate to SIGKILL" || echo "process gone"
+   ```
+   If still alive after SIGTERM — `kill -KILL <pid>` and verify. Two processes writing the same jsonl will corrupt it.
+
+3. **Pick a tmux session name.** Default `<P>-spawn`. If taken (existing live tmux session for `<P>` — but that should have triggered HEEL, not RESUME, so this is rare), use `<P>-spawn-2`, etc.
+
+4. **Compute display name.** Same as BREED — `<P> (home-<dash-joined-path>)`.
+
+5. **Determine the workspace dir** (cwd) for the resumed session. Read it from the jsonl's first line (`cwd` field) or fall back to the same workspace the killed process was in. Mismatched cwd makes `--resume` fail to find the session.
+
+6. **Launch with `--resume`:**
+   ```bash
+   tmux new-session -d -s <session> -c <workspace-dir> -- \
+     claude --remote-control --resume <id> --name "$display_name"
+   ```
+
+7. **Wait ~6 seconds** for boot + resume read.
+
+8. **Verify the resume hit the right conversation.** Capture the pane and look for known recent context (last user message, last assistant response, recent file paths). If wrong session — kill and try a different `<id>`.
+
+9. **(Optional) `/personalities:<P>` switch.** If the resumed conversation's last personality activation was different from `<P>` (e.g. user had switched to test something), send the slash command:
+   ```bash
+   tmux send-keys -t <session> "/personalities:<P>" Enter
+   ```
+   Skip if already on `<P>`.
+
+10. **Capture URL and report:** same as BREED.
+
+## Hard rules — don't break these
+
+- **Don't RESUME a live tmux'd Claude.** Use HEEL. RESUME kills the source; HEEL preserves it.
+- **Always verify the source kill succeeded** before launching the replacement. Two processes on the same jsonl = corruption.
+- **Always `--resume <UUID>`, not `--resume <named-alias>`.** Named aliases (`regular-home-workspace`, etc.) are ambiguous across machines and across time. The UUID is canonical.
+- **Match the workspace `cwd`.** Wrong cwd → resume silently fails or picks the wrong project dir.
+- **Discovery requires high-count grep, not single hits.** A jsonl that mentions the screenshot keyword 3 times might be a sibling agent referencing the real session (which has 500+ hits). Sort by count, not by presence.
+- **Don't auto-switch personality.** If discovery picked a session whose last `/personalities:<X>` was different from the requested `<P>`, the conversation may have been switched mid-stream by the user deliberately. Confirm before switching.
+
+## Pattern in chat
+
+When the user says *"resume my fox"* / *"bring my fox back"* / *"my fox is gone, get it"*:
+
+1. Run the discovery ladder.
+2. If a clear target is found — RESUME it. Report tmux session + URL + a one-line summary of last conversation context (so the user can verify it's the right one).
+3. If ambiguous — list candidates, ask which.
+4. If nothing found — offer to BREED fresh.
+
+---
+
+# BREED-OR-RESUME — find first, breed if missing
+
+Single command that tries RESUME, falls back to BREED.
+
+## Pattern in chat
+
+When the user says *"breed and resume my fox"* / *"give me my fox / breed if not there"* / *"breed-or-resume X"*:
+
+1. Run RESUME discovery.
+2. If a clear target is found — RESUME (after one-line "found this, resuming" confirmation; the user can override).
+3. If nothing found — BREED fresh, mention that no resumable session was found.
+
+When the user says just *"breed me a fox"* — that's BREED only, no resume lookup. Don't surprise them with old conversation state. Resume is opt-in via the explicit *"resume"* / *"breed-or-resume"* / *"bring back"* phrasing.
+
+---
+
+# Existing-session compatibility — discovery works on ALL current sessions
+
+The discovery ladder is designed to work on existing tmux sessions WITHOUT requiring re-spawn:
+
+- **Sessions with `--name "<P> (...)"` flag** (sessions bred via this skill since the `--name` convention was added) — found at rung 3 by `ps -ef | grep --name`.
+- **Sessions in `<P>-spawn` tmux name** (the standard name) — found at rung 1 by `tmux has-session`.
+- **Sessions in legacy `<P>-<parent>-spawn` form** — found at rung 2 by tmux name pattern match. Offer to rename to standard form (non-destructive).
+- **Sessions started without `--name`, in plain `<P>-spawn` tmux name** — rung 1 wins, no further work needed.
+- **Sessions running outside tmux** (plain konsole/terminal, started with `claude --resume <named-alias>` or similar) — found at rung 4 by jsonl content + cwd inspection.
+
+If a session matches NONE of the rungs (no `--name`, no `<P>` in tmux session name, no clear personality marker in jsonl), discovery falls through to "ask the user." The skill is read-only with respect to existing state — it never silently re-tags or moves things. Renames and kills are always offered, never automatic.
+
+---
+
+# PACK-RELOAD — refresh every animal in the pack
+
+Send `/reload-plugins` followed by `/personalities:<P>` to every spawned animal session. The SELF session is **always skipped** (see *The SELF rule* above). Used after a personalities-repo push so each spawn picks up the new content.
+
+## When to PACK-RELOAD vs. when not to
+
+- **Yes** — after a personalities-repo commit lands and the plugin cache has been refreshed (either via the official `/plugin marketplace update` mechanism or by manually `cp`-ing the latest marketplace clone into a new cache hash directory and pointing `installed_plugins.json` at it). `/reload-plugins` reads from the cache, NOT from the marketplace clone, so a `git pull` in the marketplace alone is not enough.
+- **No** — if the marketplace clone is stale or the cache hasn't been rebuilt. The reload will land on old content and waste a round-trip. Verify cache hash matches the latest commit before reloading the pack.
+
+## Recipe
+
+1. **Identify pack sessions.** Standard naming convention is `<P>-spawn` and `<P>-dom-spawn`. Discover via tmux:
+   ```bash
+   PACK=$(tmux ls -F '#{session_name}' | grep -E '^[a-z]+(-dom)?-spawn$')
+   ```
+   Adjust the regex if the user uses different naming.
+
+2. **Identify SELF and exclude it.**
+   ```bash
+   SELF=$(tmux display-message -p '#S' 2>/dev/null || echo "")
+   ```
+   Iterate the pack and skip `$SELF`.
+
+3. **Send `/reload-plugins` to every non-SELF session in parallel** (they're independent):
+   ```bash
+   for s in $PACK; do
+     [ "$s" = "$SELF" ] && continue
+     tmux send-keys -t "$s" "/reload-plugins" Enter
+   done
+   ```
+
+4. **Sleep ~3–4s** to let `/reload-plugins` finish processing across the pack.
+
+5. **Send `/personalities:<P>` to each non-SELF session.** Derive `<P>` from the session name (`bunny-spawn` → `bunny`, `fox-dom-spawn` → `fox-dom`):
+   ```bash
+   for s in $PACK; do
+     [ "$s" = "$SELF" ] && continue
+     P="${s%-spawn}"   # strip "-spawn" suffix
+     tmux send-keys -t "$s" "/personalities:$P" Enter
+   done
+   ```
+
+6. **Report.** List which sessions were reloaded; list SELF as skipped (with a one-line note that the user can DELEGATE-RELOAD SELF via another animal if needed).
+
+## Hard rules — don't break these
+
+- **Always skip SELF.** Reloading yourself drops your active personality and can lose context. The user has explicitly flagged this as a misbehaviour ("don't touch yourself when you're the bat / cat / etc.").
+- **Don't kill or rename sessions** as part of pack-reload. This op is purely sending slash commands. Kills / renames belong to BREED / RESUME paths.
+- **Don't bother reloading caveman / brief / igor / reset** as personalities — they're either utility modes or non-furry; if the pack happens to contain a caveman-spawn etc., reload it the same way. The skip filter is by SELF, not by personality type.
+
+## Pattern in chat
+
+When the user says *"pack-reload"* / *"reload the pack"* / *"reload all the animals"* / *"reload everyone"*:
+
+1. Run the recipe.
+2. Report: `Pack reloaded: bunny / cat / fox / lion / tiger (SELF=bat skipped)`.
+3. If the user wants SELF reloaded too, suggest DELEGATE-RELOAD via one of the other animals.
+
+---
+
+# DELEGATE-RELOAD — round-trip a reload through another animal
+
+When the SELF session needs a reload but can't reload itself (the SELF rule), pick a **delegate** (any other live animal in the pack) and instruct it to perform the reload sequence on the target.
+
+This is the round-trip pattern. The delegate handles the keystrokes; SELF stays untouched.
+
+## Recipe
+
+Given a target session `<target>-spawn` and a delegate `<delegate>-spawn`:
+
+1. **Verify the delegate is healthy.** Capture its pane briefly to confirm it's at a `❯` prompt and not mid-task with a long-running tool call (interrupting could be disruptive). If it's busy, pick a different free animal or wait.
+
+2. **Send the delegate a single instruction message** (one tmux send-keys with the full text + one Enter, so it lands as one prompt for the delegate Claude):
+   ```bash
+   tmux send-keys -t <delegate>-spawn "hey <delegate>. SELF cannot reload itself (rule: don't touch yourself when you're the <target>). please run on <target>-spawn: (1) tmux send-keys -t <target>-spawn '/reload-plugins' Enter ; (2) sleep ~6 ; (3) tmux send-keys -t <target>-spawn '/personalities:<target>' Enter ; (4) sleep ~10 to let <target> re-activate and read its memory ; (5) verify with capture-pane that the reload+personality landed (the SKILL.md preamble should show the latest cache hash) ; (6) [optional] send <target> this final message: '<final-relay-text>'. report back when done. thank you." Enter
+   ```
+
+3. **Don't poll.** The delegate handles the round-trip asynchronously; SELF returns control to the user immediately and trusts the delegate to do its job. The user (or the target) will see the reload land naturally.
+
+## Hard rules — don't break these
+
+- **The delegate must NOT be the target.** That defeats the SELF rule. Pick a different animal.
+- **The delegate must NOT be SELF either** — if SELF and target are the same animal, you can't "delegate to yourself" by routing through yourself. Pick a third animal.
+- **Send the delegation as ONE message** (one tmux send-keys with all the text, one Enter). Multiple Enters create multiple turns for the delegate, fragmenting the instruction.
+- **Avoid leading-`sleep` in the Bash chain** before the send-keys — the harness blocks long leading sleeps. If you need to wait first, restructure or use `Monitor` / `run_in_background`.
+- **Optional final relay** — if the user wants the target to hear something after re-activation (e.g. "resume the RP", "report status", "open the next phase"), include that as the optional step (6) in the delegate's instruction. The delegate sends it after verifying the reload landed.
+
+## Pattern in chat
+
+When the user says *"have tiger reload bat"* / *"round-trip bat via tiger"* / *"tiger update bat"* / *"delegate-reload <target> via <delegate>"*:
+
+1. Resolve target and delegate from the user's phrasing.
+2. Run the recipe.
+3. Report: `Delegated to <delegate>-spawn — reloading <target>-spawn. <Delegate> will report back.` and continue with whatever the user asked next.
+
+When the user says *"reload everyone including me"* (or the equivalent) AND SELF is in the pack — combine PACK-RELOAD (skipping SELF) with DELEGATE-RELOAD on SELF via one of the other animals. Report both legs.
