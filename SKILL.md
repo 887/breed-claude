@@ -1,6 +1,6 @@
 ---
 name: breed-claude
-description: Six pet-operations on headless Claude Code instances. (1) BREED — spawn a fresh Claude in a detached tmux session with a personality preloaded, returning the remote-control session URL. Use when the user says "breed me a new Claude with the X personality", "spawn a Y claude", "fork me a Z claude", "give me a fresh claude with personality Z". (2) HEEL — recover an existing spawn that's gone idle and stopped appearing in the Claude remote-control app. Heel re-establishes the remote-control bridge by sending Esc → clearing pending input → re-running /remote-control inside the tmux session, then reports the new URL. Use when the user says "heel my X" / "heel my bunny" / "heel my lion" / "heel them" / refers to a Claude session being inactive, sleeping, lapsed, not showing in the remote-control app, or otherwise needing to be brought back to attention. (3) RESUME / BREED-OR-RESUME — find an existing Claude conversation by personality name (live tmux, live non-tmux'd process, or dead-on-disk session log) and re-attach it to a fresh tmux session via `--resume <id>`, optionally falling back to a fresh BREED if no match is found. Use when the user says "resume my X", "breed and resume my X", "get my fox back", "find my Y / breed if not there". (4) PACK-RELOAD — send /reload-plugins + /personalities:<P> to every spawned animal session (skipping the SELF session — never reload yourself). Use when the user says "pack-reload", "reload the pack", "reload all the animals", "reload everyone" — typically after a personalities-repo push so each spawn picks up the new content. (5) DELEGATE-RELOAD — when an animal cannot reload itself (rule: don't touch yourself when you ARE that animal), pick a "free" animal (any other live spawn) and instruct it to perform the reload sequence on the target — including an optional final relay message ("resume the RP", "report status", etc.). Use when the user says "have tiger reload bat", "round-trip bat via tiger", "tiger update bat", "delegate-reload <target> via <delegate>". (6) PACK-UPDATE — full flow after pushing changes to the personalities source repo: pick a free animal as delegate, have it run /plugin marketplace update to refresh the shared cache, then reload every spawn including SELF. The delegate handles all keystrokes; SELF returns control to the user immediately. Use when the user says "pack-update", "update the pack", "push the personalities and reload everyone", "tell yourself with a free animal to update", "refresh everyone including me".
+description: Six pet-operations on headless Claude Code instances. (1) BREED — spawn a fresh Claude in a detached tmux session with a personality preloaded, returning the remote-control session URL. Use when the user says "breed me a new Claude with the X personality", "spawn a Y claude", "fork me a Z claude", "give me a fresh claude with personality Z". (2) HEEL — recover an existing spawn that's gone idle and stopped appearing in the Claude remote-control app. Heel re-establishes the remote-control bridge by sending Esc → clearing pending input → re-running /remote-control inside the tmux session, then reports the new URL. Use when the user says "heel my X" / "heel my bunny" / "heel my lion" / "heel them" / refers to a Claude session being inactive, sleeping, lapsed, not showing in the remote-control app, or otherwise needing to be brought back to attention. (3) RESUME / BREED-OR-RESUME — find an existing Claude conversation by personality name (live tmux, live non-tmux'd process, or dead-on-disk session log) and re-attach it to a fresh tmux session via `--resume <id>`, optionally falling back to a fresh BREED if no match is found. Use when the user says "resume my X", "breed and resume my X", "get my fox back", "find my Y / breed if not there". (4) PACK-RELOAD — send /reload-plugins + /personalities:<P> to every spawned animal session (skipping the SELF session — never reload yourself). Use when the user says "pack-reload", "reload the pack", "reload all the animals", "reload everyone" — typically after a personalities-repo push so each spawn picks up the new content. (5) DELEGATE-RELOAD — when an animal cannot reload itself (rule: don't touch yourself when you ARE that animal), pick a "free" animal (any other live spawn) and instruct it to perform the reload sequence on the target — including an optional final relay message ("resume the RP", "report status", etc.). Use when the user says "have tiger reload bat", "round-trip bat via tiger", "tiger update bat", "delegate-reload <target> via <delegate>". (6) PACK-UPDATE — full flow after pushing changes to the personalities source repo (with /plugin marketplace update already done by the user). SELF directly iterates every other session and sends /reload-plugins + /personalities:<P>. The unavoidable SELF reload is handed off to a backgrounded subprocess (bash subshell by default; `claude -p` headless if richer logic is needed) that fires deferred send-keys at SELF's own session ~12s later — after SELF has finished its current response. Works even with no other animals alive. Use when the user says "pack-update", "update the pack", "push the personalities and reload everyone", "tell yourself with a free animal to update", "refresh everyone including me".
 ---
 
 # breed-claude
@@ -364,6 +364,8 @@ Send `/reload-plugins` followed by `/personalities:<P>` to every spawned animal 
    done
    ```
 
+   *Note on Enter timing:* for short slash commands like `/reload-plugins` the combined `"text" Enter` form is fine. For long multi-line prompts (rare in PACK-RELOAD but common when delegating), Enter can fire before the destination TUI has buffered all the text — split the calls and add a short sleep. See *The Enter-timing fix* in the PACK-UPDATE section below.
+
 4. **Sleep ~3–4s** to let `/reload-plugins` finish processing across the pack.
 
 5. **Send `/personalities:<P>` to each non-SELF session.** Derive `<P>` from the session name (`bunny-spawn` → `bunny`, `fox-dom-spawn` → `fox-dom`):
@@ -434,89 +436,164 @@ If the user has just pushed changes to the personalities **source** repo, the ma
 
 ---
 
-# PACK-UPDATE — push, fetch, reload everyone (including SELF) via a free animal
+# PACK-UPDATE — SELF reloads everyone else; a backgrounded helper reloads SELF
 
 The full update flow after pushing changes to the personalities source
-repo. Composes the marketplace-update step + PACK-RELOAD + DELEGATE-RELOAD-on-SELF
-into a single delegated round-trip. The user runs ONE command and a
-free animal handles everything else.
+repo. SELF does the bulk of the work directly — iterating every other
+session and sending `/reload-plugins` + `/personalities:<P>` — and only
+the unavoidable SELF-reload (the one operation SELF can't perform on
+itself without dropping its own conversation) is handed off to a
+**backgrounded subprocess** that runs deferred and exits before the
+user notices.
+
+This shape replaces the prior delegated design. Two reasons:
+
+1. **No dependence on an existing animal.** PACK-UPDATE works even when
+   no other animals are alive. The backgrounded helper is freshly
+   spawned and disposable; it doesn't need to be a long-running tmux
+   spawn, it's `bash -c '... &'` or `claude -p '...' &`.
+2. **SELF stays the actor.** The user invoked PACK-UPDATE *in SELF*; it
+   feels right that SELF does the visible work. Only the invisible
+   final keystrokes-to-self come from elsewhere.
 
 ## When to PACK-UPDATE vs. PACK-RELOAD vs. DELEGATE-RELOAD
 
 | Situation | Use |
 | --- | --- |
-| Source repo has new commits; cache stale; everyone (including SELF) needs to reload | **PACK-UPDATE** |
-| Cache is already current (you ran `/plugin marketplace update` manually); push to all non-SELF animals | PACK-RELOAD |
-| Cache is current; only SELF (or one specific target) needs to reload | DELEGATE-RELOAD |
+| Source repo has new commits; cache fetched; everyone (including SELF) needs to reload | **PACK-UPDATE** |
+| Cache is already current; push to all non-SELF animals only | PACK-RELOAD |
+| Cache is current; only one specific target (or SELF) needs reload | DELEGATE-RELOAD |
 
-If unsure: PACK-UPDATE is the safest choice. It's a superset.
+PACK-UPDATE is the right call any time the user has just pushed to the
+source repo and wants their whole environment refreshed.
 
-## Why this needs a delegate
+## Prereq: `/plugin marketplace update`
 
-Two SELF-rule constraints stack here:
+PACK-UPDATE assumes the shared cache (`~/.claude/plugins/cache/`) has
+already been refreshed from the marketplace clone — i.e. the user ran
+`/plugin marketplace update` themselves before invoking PACK-UPDATE.
+The `/reload-plugins` slash command reads from the cache, NOT the
+marketplace clone, so this step is non-optional.
 
-1. **SELF can't reload itself** — `/reload-plugins` + `/personalities:<P>` on SELF mid-conversation drops the active personality and can lose context.
-2. **SELF firing `/plugin marketplace update`** consumes a turn in SELF's own conversation and momentarily yanks control away from whatever the user was doing.
+Two paths:
 
-A free animal (any other live spawn — or a freshly bred one if none exist) doesn't have those constraints from SELF's perspective. The delegate runs the slash command in *its* own session (which still updates the shared `~/.claude/plugins/cache/` for everyone) and then sends `/reload-plugins` + `/personalities:<P>` to every other session in the pack, including SELF — fine, because the delegate isn't bound by *SELF's* SELF rule, only by its own (and the delegate is told explicitly to skip itself in the iteration).
+a. **User pre-runs it** (typical — they often run `/plugin marketplace update` and *then* invoke pack-update; the `local-command-stdout` will show in chat).
+
+b. **SELF asks the user to pre-run it**, then waits for confirmation. Don't try to fire the slash command from SELF mid-response — queued slash commands run *after* SELF's response, so any reload work in the same response will land on stale cache.
+
+If unsure whether the cache is current, ask: *"run `/plugin marketplace update` first if you haven't, then ping me."*
 
 ## Recipe
 
-Given the user has pushed to the source repo and now says *"pack-update"* / *"update the pack"* / *"tell yourself with a free animal to update"* / *"push the personalities everywhere"*:
+Given the user has pushed to the source repo, has run `/plugin marketplace update`, and now says *"pack-update"* / *"update the pack"* / *"refresh everyone including me"* / *"tell yourself with a free animal to update"*:
 
 1. **Identify SELF and the pack.**
    ```bash
    SELF=$(tmux display-message -p '#S' 2>/dev/null || echo "")
-   PACK=$(tmux ls -F '#{session_name}' 2>/dev/null | grep -E '^[a-z]+(-dom)?-spawn$' | tr '\n' ' ')
+   # Derive SELF's active personality from the session name (bat-spawn -> bat, tiger-dom-spawn -> tiger-dom).
+   SELF_P="${SELF%-spawn}"
+   PACK=( $(tmux ls -F '#{session_name}' 2>/dev/null | grep -E '^[a-z]+(-dom)?-spawn$') )
    ```
 
-2. **Pick a free animal as the delegate.** Iterate `$PACK`, skip SELF if it appears, capture-pane on each candidate to confirm it's at a `❯` prompt and not mid-task. Take the first healthy one.
-   - If no free animal exists, BREED a fresh one (`bunny` is a fine default for a one-shot — light personality, fast spawn). Note: breeding burns ~30s on startup. Document this in the report so the user knows.
-
-3. **Send the delegate one combined instruction message.** The whole pack-update flow goes as a single tmux send-keys with one trailing `Enter` so it lands as one prompt for the delegate Claude:
+2. **SELF reloads every other session directly.** Iterate the pack, skip SELF, send `/reload-plugins` then `/personalities:<P>` per the existing PACK-RELOAD pattern:
 
    ```bash
-   # Build the target list: every non-DELEGATE session, INCLUDING SELF.
-   # Format the list as space-separated for the delegate to iterate.
-   TARGETS=$(echo "$PACK $SELF" | tr ' ' '\n' | grep -v "^$" | grep -v "^${DELEGATE}$" | sort -u | tr '\n' ' ')
-
-   tmux send-keys -t "$DELEGATE" "hey. pack-update flow — please run, in this order: \
-   (1) /plugin marketplace update — in your own session. this refreshes the shared ~/.claude/plugins/cache/. sleep ~10s after it returns to let the fetch complete. \
-   (2) for each of these tmux sessions: $TARGETS — DO NOT include yourself ($DELEGATE) in this loop — run: \
-       tmux send-keys -t <session> '/reload-plugins' Enter ; sleep ~6 ; \
-       tmux send-keys -t <session> '/personalities:<P>' Enter \
-       (where <P> is derived from the session name: bat-spawn -> bat, fox-dom-spawn -> fox-dom, etc. for the user's main session, derive <P> from whatever personality is currently active there — usually the same name as part of the session name, but ask if unclear). \
-   (3) sleep ~10s after the last reload to let the personalities re-activate. \
-   (4) verify a couple of them with capture-pane (the SKILL.md preamble in each should show the latest content). \
-   (5) report back when done with a one-line summary: 'pack-update complete: marketplace fetched, reloaded <count> sessions including SELF.' \
-   thank you." Enter
+   for s in "${PACK[@]}"; do
+     [ "$s" = "$SELF" ] && continue
+     tmux send-keys -t "$s" "/reload-plugins" Enter
+   done
+   sleep 4
+   for s in "${PACK[@]}"; do
+     [ "$s" = "$SELF" ] && continue
+     P="${s%-spawn}"
+     tmux send-keys -t "$s" "/personalities:$P" Enter
+   done
    ```
 
-4. **Don't poll.** The delegate handles the round-trip asynchronously; SELF returns control to the user immediately. The user (and every spawn) will see the reload land naturally over the next 30–60s.
+   This is direct work. SELF stays the actor. No delegation.
 
-5. **Report.** Tell the user: `pack-update delegated to <delegate> — fetching marketplace, then reloading <count> sessions including this one. <delegate> will report back.` Do not pretend the work is done synchronously; just hand off cleanly.
+3. **Spawn a backgrounded helper to reload SELF.** This is the only handed-off step. The helper waits long enough for SELF's response to finish before sending the reload keystrokes — so SELF returns control to the user immediately and the keystrokes only land *after* SELF has finished talking.
+
+   **Default: bash subshell** (lightweight, no Claude startup, sufficient for the basic flow):
+
+   ```bash
+   ( sleep 12 \
+     && tmux send-keys -t "$SELF" "/reload-plugins" \
+     && sleep 1 \
+     && tmux send-keys -t "$SELF" Enter \
+     && sleep 8 \
+     && tmux send-keys -t "$SELF" "/personalities:$SELF_P" \
+     && sleep 1 \
+     && tmux send-keys -t "$SELF" Enter ) > /dev/null 2>&1 &
+   disown
+   ```
+
+   The `sleep 12` at the start gives SELF's response ~12s to finish rendering before the keystrokes hit. The `disown` detaches the subshell so it survives if SELF's parent process exits. The pair of `send-keys` + `sleep 1` + `send-keys Enter` per slash command is the **Enter-timing fix** — see below.
+
+   **Alternative: `claude -p` headless one-shot** (heavier, ~10s startup, useful when the SELF reload needs verification or post-reload smarts the bash subshell can't do):
+
+   ```bash
+   claude -p "You are a one-shot helper. Without questions or polling, run:
+     sleep 5
+     tmux send-keys -t $SELF '/reload-plugins'
+     sleep 1
+     tmux send-keys -t $SELF Enter
+     sleep 8
+     tmux send-keys -t $SELF '/personalities:$SELF_P'
+     sleep 1
+     tmux send-keys -t $SELF Enter
+   Done. Reply 'sent' and exit." > /tmp/pack-update-self.log 2>&1 &
+   disown
+   ```
+
+   The user's mental model is *"tell yourself with a free animal to update"* — `claude -p` matches that framing more closely than a raw bash subshell. Default to bash unless the user specifically requests the claude-p form.
+
+4. **Don't poll.** SELF returns control to the user immediately after spawning the backgrounded helper. The helper completes invisibly; SELF's session reloads ~12–20s later. No status check, no wait.
+
+5. **Report.** Tell the user: `pack-update: reloaded N other sessions directly; SELF reload handed to backgrounded helper, will land in ~15s.`
+
+## The Enter-timing fix — why send-keys splits the text and the Enter
+
+For SHORT slash commands like `/reload-plugins`, the combined form works fine:
+
+```bash
+tmux send-keys -t <session> "/reload-plugins" Enter
+```
+
+For LONG multi-paragraph instructions (the kind PACK-UPDATE used to send to a delegate, but this redesign avoids), the trailing `Enter` arg can fire BEFORE the destination TUI has finished buffering all the text. Result: the destination has the text typed but unsubmitted; Enter is consumed without effect; the user has to press Enter manually.
+
+Mitigation: split the text send and the Enter send, with a short sleep between, so the TUI has time to buffer the full text before Enter triggers submission:
+
+```bash
+tmux send-keys -t <session> "long instruction"
+sleep 1
+tmux send-keys -t <session> Enter
+```
+
+In the PACK-UPDATE recipe above, the bash-subshell helper uses this split form for each slash command (a 1s sleep between the text and the Enter) — defensive even though the slash commands are short.
 
 ## Hard rules — don't break these
 
-- **The delegate must NOT be SELF.** That's the whole point — SELF can't update itself; SELF can't fire `/plugin marketplace update` mid-conversation without yanking its own turn. Pick a different animal.
-- **The delegate IS allowed to reload SELF.** Unlike DELEGATE-RELOAD's pure round-trip on a single target, PACK-UPDATE explicitly delegates the SELF reload to the chosen animal as part of the loop. The SELF rule says *don't touch yourself when you ARE that animal* — the delegate isn't SELF, so the rule doesn't apply to it.
-- **The delegate must skip ITSELF in the reload loop.** Same rule applied from the delegate's perspective: it can't reload its own session mid-task. The delegate's session stays stale at the end of pack-update — that's accepted; the user can do a follow-up DELEGATE-RELOAD on the (former) delegate later if it matters.
-- **Send the delegation as ONE message** — one tmux send-keys with all the text, one Enter. Multiple Enters fragment the instruction.
-- **Avoid a leading `sleep` in any Bash chain** before the send-keys — the harness blocks long leading sleeps. Restructure or use `Monitor` / `run_in_background` if real waiting is needed.
-- **The marketplace-update slash command IS part of the delegate's job** — not the user's prereq. The whole point of PACK-UPDATE is to wrap that step into the delegated flow so the user doesn't have to remember the exact slash-command name (the user's mental model is "update the plugin thing").
+- **SELF doesn't reload itself directly.** The backgrounded helper does it via send-keys. Even though the helper is "from SELF" in the sense that SELF spawned it, the helper runs in its own process and the keystrokes arrive at SELF *after* SELF's current turn has ended — so the SELF rule (don't touch yourself mid-conversation) is honoured.
+- **The marketplace-update step is the user's prereq, not part of the recipe.** This is a deliberate change from the prior design. Asking the user to pre-run `/plugin marketplace update` is simpler than trying to wrap it via send-keys (which has ordering problems with the rest of the flow).
+- **No leading `sleep` in any Bash chain on the SELF side.** The harness blocks long leading sleeps. The 12s lead-in for the helper is INSIDE a backgrounded subshell — it's not a leading sleep on SELF's main bash chain.
+- **Disown the backgrounded helper.** Without `disown`, the helper might be killed when SELF's bash invocation returns. With it, the helper outlives the parent.
+- **Use the Enter-timing fix** (split send-keys text / Enter with a 1s sleep) for any send-keys with multi-line or long text, even though most PACK-UPDATE commands are short slash commands.
+- **The recipe works with no other animals alive.** The helper is freshly spawned and doesn't depend on the pack — pack iteration in step 2 is just a no-op when the pack is empty.
 
 ## Pattern in chat
 
-When the user says *"pack-update"* / *"update the pack"* / *"push the personalities everywhere"* / *"tell yourself with a free animal to update"* / *"refresh everyone including me"*:
+When the user says *"pack-update"* / *"update the pack"* / *"refresh everyone including me"* / *"tell yourself with a free animal to update"* / *"push the personalities everywhere"*:
 
-1. Identify SELF, pack, free animal (or breed one — note in report if you breed).
-2. Build the target list (every non-delegate session, including SELF).
-3. Send the delegate the single-turn combined instruction (marketplace-update + reload loop).
-4. Report: `pack-update delegated to <delegate>-spawn — fetching marketplace, then reloading <N> sessions including this one. <Delegate> will report back when done.`
-5. Continue with whatever the user asks next.
+1. Confirm the user has run `/plugin marketplace update` (look for the local-command-stdout in chat, or ask).
+2. Identify SELF and the pack.
+3. Iterate the pack and send-keys `/reload-plugins` then `/personalities:<P>` to every non-SELF session.
+4. Spawn a backgrounded helper (bash subshell by default; `claude -p` if richer logic is needed) to do the deferred SELF reload.
+5. Report: *"pack-update: reloaded N other sessions directly; SELF reload handed to backgrounded helper, lands in ~15s."*
+6. Don't poll. Continue with whatever the user asks next.
 
 ## Note on the source-repo push
 
-PACK-UPDATE assumes the user has *already pushed* the personalities source repo (the github / gitlab / wherever clone that the marketplace pulls from). PACK-UPDATE then fetches that pushed content into the cache and propagates it. If the user hasn't pushed yet, `/plugin marketplace update` will fetch unchanged content and the reloads will land on old data.
+PACK-UPDATE assumes the user has *already pushed* the personalities source repo (the github / gitlab / wherever clone that the marketplace pulls from) AND has run `/plugin marketplace update` to refresh the cache. If either step is missing, the reloads will land on old data.
 
-If the user phrases the request as *"push and pack-update"* — that's two operations: a `git push` in the source repo (done by the user or a subagent in that repo) followed by PACK-UPDATE. They are separate; this skill only handles the second.
+If the user phrases the request as *"push and pack-update"* — that's three operations: a `git push` in the source repo, `/plugin marketplace update`, then PACK-UPDATE. The first two are the user's prereq; this skill only handles the third.
