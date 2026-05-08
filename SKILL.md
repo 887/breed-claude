@@ -525,14 +525,23 @@ Given the user has pushed to the personalities source repo and now says *"pack-u
      # Cache is fresh now; /reload-plugins + /personalities:<P> picks up the new content.
      # Enter-timing fix: split text-send and Enter-send with a 1s sleep so the destination
      # TUI has time to buffer before Enter triggers submission.
-     for s in $ALL; do
+     #
+     # IMPORTANT: use `printf %s\\n "$ALL" | while read` — NOT `for s in $ALL`.
+     # zsh does not word-split unquoted parameter expansions by default
+     # (different from bash), so `for s in $ALL` would treat the whole
+     # newline-separated string as ONE iteration value, sending all the
+     # session names to send-keys as a single pane spec → "can't find pane".
+     # The while-read form is portable across bash and zsh.
+     printf '%s\n' "$ALL" | while IFS= read -r s; do
+       [ -z "$s" ] && continue
        tmux send-keys -t "$s" "/reload-plugins"
        sleep 1
        tmux send-keys -t "$s" Enter
      done
      sleep 8  # let /reload-plugins finish on each session
 
-     for s in $ALL; do
+     printf '%s\n' "$ALL" | while IFS= read -r s; do
+       [ -z "$s" ] && continue
        P="${s%-spawn}"
        tmux send-keys -t "$s" "/personalities:$P"
        sleep 1
