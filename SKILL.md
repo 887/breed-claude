@@ -1,6 +1,6 @@
 ---
 name: breed-claude
-description: Six pet-operations on headless Claude Code instances. (1) BREED — spawn a fresh Claude in a detached tmux session with a personality preloaded, returning the remote-control session URL. Use when the user says "breed me a new Claude with the X personality", "spawn a Y claude", "fork me a Z claude", "give me a fresh claude with personality Z". (2) HEEL — recover an existing spawn that's gone idle and stopped appearing in the Claude remote-control app. Heel re-establishes the remote-control bridge by sending Esc → clearing pending input → re-running /remote-control inside the tmux session, then reports the new URL. Use when the user says "heel my X" / "heel my bunny" / "heel my lion" / "heel them" / refers to a Claude session being inactive, sleeping, lapsed, not showing in the remote-control app, or otherwise needing to be brought back to attention. (3) RESUME / BREED-OR-RESUME — find an existing Claude conversation by personality name (live tmux, live non-tmux'd process, or dead-on-disk session log) and re-attach it to a fresh tmux session via `--resume <id>`, optionally falling back to a fresh BREED if no match is found. Use when the user says "resume my X", "breed and resume my X", "get my fox back", "find my Y / breed if not there". (4) PACK-RELOAD — send /reload-plugins + /personalities:<P> to every spawned animal session (skipping the SELF session — never reload yourself). Use when the user says "pack-reload", "reload the pack", "reload all the animals", "reload everyone" — typically after a personalities-repo push so each spawn picks up the new content. (5) DELEGATE-RELOAD — when an animal cannot reload itself (rule: don't touch yourself when you ARE that animal), pick a "free" animal (any other live spawn) and instruct it to perform the reload sequence on the target — including an optional final relay message ("resume the RP", "report status", etc.). Use when the user says "have tiger reload bat", "round-trip bat via tiger", "tiger update bat", "delegate-reload <target> via <delegate>". (6) PACK-UPDATE — one-command full update flow after pushing changes to the personalities source repo. SELF spawns ONE backgrounded orchestrator subshell that: (a) launches a fresh ephemeral interactive Claude tmux session, (b) sends /plugin marketplace update into it via send-keys, (c) waits for the cache fetch, (d) kills the ephemeral, (e) sends /reload-plugins + /personalities:<P> to every existing session INCLUDING SELF. SELF returns control to the user immediately; keystrokes land ~35-40s later after SELF's response has finished. No prereq: the orchestrator does the marketplace fetch itself. Works with no other animals alive (the ephemeral is freshly spawned). Use when the user says "pack-update", "update the pack", "push the personalities and reload everyone", "refresh everyone including me".
+description: Six pet-operations on headless Claude Code instances. (1) BREED — spawn a fresh Claude in a detached tmux session with a personality preloaded, returning the remote-control session URL. Use when the user says "breed me a new Claude with the X personality", "spawn a Y claude", "fork me a Z claude", "give me a fresh claude with personality Z". (2) HEEL — recover an existing spawn that's gone idle and stopped appearing in the Claude remote-control app. Heel re-establishes the remote-control bridge by sending Esc → clearing pending input → re-running /remote-control inside the tmux session, then reports the new URL. Use when the user says "heel my X" / "heel my bunny" / "heel my lion" / "heel them" / refers to a Claude session being inactive, sleeping, lapsed, not showing in the remote-control app, or otherwise needing to be brought back to attention. (3) RESUME / BREED-OR-RESUME — find an existing Claude conversation by personality name (live tmux, live non-tmux'd process, or dead-on-disk session log) and re-attach it to a fresh tmux session via `--resume <id>`, optionally falling back to a fresh BREED if no match is found. Use when the user says "resume my X", "breed and resume my X", "get my fox back", "find my Y / breed if not there". (4) PACK-RELOAD — send /reload-plugins + /personalities:<P> to every spawned animal session (skipping the SELF session — never reload yourself). Use when the user says "pack-reload", "reload the pack", "reload all the animals", "reload everyone" — typically after a personalities-repo push so each spawn picks up the new content. (5) DELEGATE-RELOAD — when an animal cannot reload itself (rule: don't touch yourself when you ARE that animal), pick a "free" animal (any other live spawn) and instruct it to perform the reload sequence on the target — including an optional final relay message ("resume the RP", "report status", etc.). Use when the user says "have tiger reload bat", "round-trip bat via tiger", "tiger update bat", "delegate-reload <target> via <delegate>". (6) PACK-UPDATE — one-command full update flow after pushing changes to the personalities source repo. SELF spawns ONE backgrounded orchestrator subshell that runs (a) `claude plugin marketplace update <marketplace>` (b) `claude plugin update <plugin>@<marketplace>` and then (c) sends /reload-plugins + /personalities:<P> via tmux send-keys to every existing -spawn session INCLUDING SELF. The two CLI commands are non-interactive — no ephemeral Claude session, no `claude -p` startup. SELF returns control immediately; keystrokes land ~15–20s later after SELF's response has finished. Default plugin: personalities@personalities (override via PLUGIN env var). Works with no other animals alive. Use when the user says "pack-update", "update the pack", "push the personalities and reload everyone", "refresh everyone including me".
 ---
 
 # breed-claude
@@ -467,68 +467,70 @@ This shape replaces the prior delegated design. Two reasons:
 PACK-UPDATE is the right call any time the user has just pushed to the
 source repo and wants their whole environment refreshed.
 
-## No prereq — the orchestrator does the marketplace fetch too
+## No prereq — and no ephemeral claude either
 
 Earlier iterations of this skill required the user to pre-run
-`/plugin marketplace update` before invoking PACK-UPDATE. That was
-friction: easy to forget, and one extra step the user shouldn't have
-to remember.
+`/plugin marketplace update`, then later spawned an ephemeral
+interactive Claude tmux session to fire that slash command for them.
+Both were over-engineered. The Claude Code CLI exposes the equivalents
+directly:
 
-The current design eliminates the prereq. The backgrounded orchestrator
-does the marketplace fetch itself, by spawning a fresh ephemeral
-interactive Claude tmux session, sending `/plugin marketplace update`
-into it via send-keys, waiting for the cache fetch to complete, then
-killing the ephemeral. After that, it sends the reload sequence to
-every existing session including SELF.
+```
+claude plugin marketplace update [name]   # refresh marketplace clone(s) from source
+claude plugin update <plugin>@<marketplace>   # update installed plugin from refreshed clone
+```
 
-`/reload-plugins` reads from the cache, not from the marketplace
-clone, so the reload sequence MUST happen *after* the ephemeral's
-marketplace fetch completes. The orchestrator enforces this ordering
-with sleep gates.
+Both are CLI commands — they run from a normal shell, no TUI, no
+slash-command processing required, no ephemeral session to drive.
+The `restart required to apply` note means the running Claude needs
+to `/reload-plugins` afterward to pick up the new content — that's
+what the send-keys loop does in the recipe below.
+
+For the personalities marketplace specifically:
+
+- marketplace name: `personalities`
+- plugin name: `personalities@personalities`
+- source repo: `github.com/887/personalities`
+
+(Verify with `claude plugin list` if unsure.)
 
 ## Recipe
 
-Given the user has pushed to the source repo and now says *"pack-update"* / *"update the pack"* / *"refresh everyone including me"* / *"tell yourself with a free animal to update"*:
+Given the user has pushed to the personalities source repo and now says *"pack-update"* / *"update the pack"* / *"refresh everyone including me"* / *"tell yourself with a free animal to update"*:
 
 1. **Identify SELF and every existing animal session.**
    ```bash
    SELF=$(tmux display-message -p '#S' 2>/dev/null || echo "")
    ALL=$(tmux ls -F '#{session_name}' 2>/dev/null | grep -E '^[a-z]+(-dom)?-spawn$')
-   # ALL is space/newline-separated; includes SELF if SELF is a -spawn session.
+   # ALL is newline-separated; includes SELF if SELF is a -spawn session.
    ```
 
-2. **Spawn a backgrounded orchestrator subshell that does the whole flow.** SELF returns control to the user immediately; the orchestrator runs in parallel and only delivers its keystrokes *after* SELF's current response is done.
+2. **Pick the plugin spec** (default = personalities, override if the user names a different plugin or marketplace):
+   ```bash
+   PLUGIN="${PLUGIN:-personalities@personalities}"
+   MARKETPLACE="${PLUGIN##*@}"   # everything after the @
+   ```
+
+3. **Spawn a backgrounded orchestrator subshell that does the whole flow.** SELF returns control to the user immediately; the orchestrator runs in parallel and only delivers its keystrokes *after* SELF's current response is done.
 
    ```bash
    (
-     EPHEMERAL="pack-update-eph-$$"
+     # Step 1 — refresh the marketplace clone from source (e.g. git pull on the github clone).
+     claude plugin marketplace update "$MARKETPLACE"
 
-     # Step 1 — spawn an ephemeral interactive Claude session (the "free
-     # animal" for the slash command). Interactive (not `claude -p`)
-     # because /plugin marketplace update is a TUI slash command.
-     tmux new-session -d -s "$EPHEMERAL" -- claude --remote-control 2>&1
-     sleep 10  # let claude finish startup
+     # Step 2 — update the installed plugin cache from the refreshed clone.
+     claude plugin update "$PLUGIN"
 
-     # Step 2 — fire /plugin marketplace update via send-keys.
-     # Enter-timing fix: split the text-send and the Enter-send with a 1s sleep
-     # so the destination TUI has time to buffer the full text before Enter
-     # triggers submission. See "The Enter-timing fix" section below.
-     tmux send-keys -t "$EPHEMERAL" "/plugin marketplace update"
-     sleep 1
-     tmux send-keys -t "$EPHEMERAL" Enter
-     sleep 14  # let the marketplace fetch + claude finish processing
-
-     # Step 3 — kill the ephemeral (it's done its job).
-     tmux kill-session -t "$EPHEMERAL"
-
-     # Step 4 — reload every existing session, INCLUDING SELF. Cache is
-     # fresh now; /reload-plugins + /personalities:<P> picks up the new content.
+     # Step 3 — reload every existing -spawn session, INCLUDING SELF.
+     # Cache is fresh now; /reload-plugins + /personalities:<P> picks up the new content.
+     # Enter-timing fix: split text-send and Enter-send with a 1s sleep so the destination
+     # TUI has time to buffer before Enter triggers submission.
      for s in $ALL; do
        tmux send-keys -t "$s" "/reload-plugins"
        sleep 1
        tmux send-keys -t "$s" Enter
      done
-     sleep 8
+     sleep 8  # let /reload-plugins finish on each session
 
      for s in $ALL; do
        P="${s%-spawn}"
@@ -540,38 +542,42 @@ Given the user has pushed to the source repo and now says *"pack-update"* / *"up
    disown
    ```
 
-   - The whole orchestrator runs **inside one backgrounded subshell**. SELF doesn't wait. The `disown` detaches the subshell so it survives even if SELF's parent process exits.
-   - The ephemeral is `claude --remote-control` (interactive — needed for slash-command processing). It's killed as soon as the marketplace fetch is done. ~25s lifetime.
-   - **Total ETA**: ~10s ephemeral startup + ~14s marketplace fetch + ~8s reload pass + ~few s personality pass = ~35–40s before SELF reloads. SELF's response finishes well within that window, so the keystrokes only land *after* SELF has handed control back to the user.
-   - **No-pack case is fine**: if `$ALL` is empty (no animal spawns alive), the for-loops are no-ops; only the ephemeral cycle runs and reloads nothing. Though if `$ALL` doesn't include SELF (e.g. SELF isn't running in a `-spawn` named tmux session), SELF won't be reloaded. That's correct behaviour — pack-update is for `-spawn` named sessions; SELF outside that convention isn't part of the pack.
+   - The whole orchestrator runs **inside one backgrounded subshell**. SELF doesn't wait. `disown` detaches it so it survives even if SELF's parent process exits.
+   - **Total ETA**: ~3–5s for `claude plugin marketplace update` + `claude plugin update` (mostly a `git pull` and a cache copy) + ~8s reload pass + ~few s personality pass = **~15–20s** before SELF reloads. SELF's response finishes well within that window, so the keystrokes only land *after* SELF has handed control back to the user.
+   - **No-pack case is fine**: if `$ALL` is empty, the for-loops are no-ops — the marketplace+plugin update still happened, so the next time the user opens an interactive Claude it'll see the new content. If `$ALL` doesn't include SELF (e.g. SELF isn't running in a `-spawn` named tmux session), SELF won't be reloaded — that's correct, pack-update is for `-spawn` named sessions; SELF outside that convention isn't part of the pack.
 
-3. **Don't poll.** SELF returns control to the user immediately. The orchestrator's keystrokes hit each session in sequence over the next ~35–40s.
+4. **Don't poll.** SELF returns control to the user immediately. The orchestrator's keystrokes hit each session in sequence.
 
-4. **Report**:
+5. **Report**:
    ```
    pack-update spawned in background:
-     1. ephemeral claude → /plugin marketplace update
-     2. (kill ephemeral)
-     3. /reload-plugins + /personalities:<P> → every session including SELF
-   total ETA ~40s. SELF reloads when keystrokes land — this conversation will reset.
+     1. claude plugin marketplace update <marketplace>
+     2. claude plugin update <plugin>@<marketplace>
+     3. /reload-plugins + /personalities:<P> → every -spawn session including SELF
+   ETA ~15–20s. SELF reloads when keystrokes land — this conversation will reset.
    ```
 
-## Why an ephemeral interactive claude (and not `claude -p`)
+## Why CLI commands (not an ephemeral interactive claude, not `claude -p`)
 
-`/plugin marketplace update` is a Claude Code TUI slash command. It's
-processed by the harness when typed at the interactive prompt. `claude
--p "/plugin marketplace update"` (one-shot non-interactive mode) does
-NOT process the prompt as a slash command — the harness sees the prompt
-text, sends it to Claude as a user turn, and Claude's response is
-generated text rather than a marketplace fetch.
+The CLI gives us direct access to the marketplace-update and
+plugin-update logic without needing a TUI:
 
-So the ephemeral has to be an interactive `claude` (with or without
-`--remote-control`). Send-keys drives it externally. After the slash
-command completes, the ephemeral is disposable; we kill it.
+- `claude plugin marketplace update <name>` — runs the same operation the `/plugin marketplace update` slash command runs internally, but as a one-shot CLI invocation. No TUI, no Claude conversation, no ephemeral tmux session, no `claude -p` startup overhead.
+- `claude plugin update <plugin>` — bumps the installed cache to the latest from the (just-refreshed) marketplace clone.
 
-If/when `claude -p` gains slash-command processing, this can simplify
-to `claude -p '/plugin marketplace update' &` and skip the ephemeral.
-Until then, the interactive-spawn pattern is the reliable path.
+After the cache is fresh, the only step that DOES need to happen via
+TUI is `/reload-plugins` + `/personalities:<P>` (those are
+session-state operations on the running Claude). Those go via
+`tmux send-keys` to each existing session. SELF is one of those
+sessions; the keystrokes arrive at SELF after SELF's current turn has
+ended, so the SELF rule (don't touch yourself mid-conversation) is
+honoured.
+
+Earlier designs spawned an ephemeral interactive Claude session
+specifically to fire the `/plugin marketplace update` slash command
+because we didn't realize the CLI exposed it directly. With the CLI
+known, the ephemeral spawn is unnecessary — and the orchestrator
+collapses to a few CLI calls plus the standard send-keys loop.
 
 ## The Enter-timing fix — why send-keys splits the text and the Enter
 
