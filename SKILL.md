@@ -144,15 +144,19 @@ Given a tmux session name `<session>` (or a personality name `<P>` — default s
    tmux send-keys -t <session> Escape
    ```
 
-4. **Clear the input line and fire `/remote-control`:**
+4. **Clear the input line and fire `/remote-control` via bracketed paste:**
    ```bash
-   tmux send-keys -t <session> cc
-   sleep 0.3
-   tmux send-keys -t <session> '/remote-control'
-   sleep 0.5
+   tmux send-keys -t <session> C-u
+   printf '%s' '/remote-control' | tmux load-buffer -b cc-heel -
+   tmux paste-buffer -p -b cc-heel -t <session>
+   tmux delete-buffer -b cc-heel
+   sleep 0.4
    tmux send-keys -t <session> Enter
    ```
-   `cc` (vim "change current line") deletes the existing buffer content and enters INSERT mode in one step — cleaner than backspacing. The slash-command picker auto-selects `/remote-control` when it's the top match; Enter fires it.
+
+   **Why bracketed paste, not `send-keys '/remote-control'`:** Claude TUI v2.1.x has a slash-command picker that intercepts keystrokes typed after `/` — the first ~5 chars get consumed as picker filter input, then the remainder lands as plain text on a new line of the input box. The result is the input shows `te-control` on line 2 and Enter doesn't submit (multi-line mode swallows it as newline). `tmux paste-buffer -p` uses **bracketed paste mode** (ANSI `\e[200~ … \e[201~`), which Claude TUI treats as paste data and does NOT route through the slash picker — the entire `/remote-control` string lands as one input line. Enter then submits it normally.
+
+   `C-u` clears any existing buffer content first. The named buffer `cc-heel` keeps the user's default tmux paste buffer untouched.
 
 5. **Wait for the bridge to re-connect** (~1.5s):
    ```bash

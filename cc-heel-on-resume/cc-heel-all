@@ -75,7 +75,20 @@ while IFS=' ' read -r pane root_pid; do
   log "pane=$pane claude_pid=$claude_pid: no established socket, heeling"
   tmux send-keys -t "$pane" Escape
   tmux send-keys -t "$pane" C-u
-  tmux send-keys -t "$pane" '/remote-control' Enter
+  # Use bracketed paste (paste-buffer -p) instead of send-keys for the
+  # slash command. In Claude TUI v2.1.x the slash-command picker intercepts
+  # keystrokes typed after `/` and eats the first ~5 chars as filter input,
+  # so `send-keys '/remote-control'` lands as `te-control` plain text on
+  # line 2 of the input box and Enter never submits. Bracketed paste signals
+  # "this is paste data, not keystrokes" and the picker leaves it alone —
+  # the whole `/remote-control` string lands as one input line, then Enter
+  # submits cleanly. Named buffer `cc-heel` is used so the user's default
+  # tmux paste buffer is preserved.
+  printf '%s' '/remote-control' | tmux load-buffer -b cc-heel -
+  tmux paste-buffer -p -b cc-heel -t "$pane"
+  tmux delete-buffer -b cc-heel
+  sleep 0.4
+  tmux send-keys -t "$pane" Enter
   heeled=$((heeled + 1))
 done < <(tmux list-panes -a -F '#{pane_id} #{pane_pid}')
 
