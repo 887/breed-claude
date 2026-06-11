@@ -73,8 +73,28 @@ while IFS=' ' read -r pane root_pid; do
   fi
 
   log "pane=$pane claude_pid=$claude_pid: no established socket, heeling"
+  # Clear the input box RELIABLY before pasting the slash command. `C-u`
+  # only kills the current line back to the cursor, so a multi-line or
+  # menu-wedged Claude input box is left with residue and `/remote-control`
+  # pastes onto junk → submits as chat, never fires. `Ctrl-C` is the only
+  # thing that reliably empties Claude's input.
+  #
+  # Safety against accidental exit (a 2nd Ctrl-C exits Claude):
+  #   - leading Escape first: closes any open menu AND disarms a pre-armed
+  #     "Press Ctrl-C again to exit" state left from a previous run/user.
+  #     This is the DOUBLE-SUSPEND guard: if one resume's heel armed the
+  #     exit (a Ctrl-C on an empty box) and the machine suspended again
+  #     before the paste below disarmed it, the next resume's heel would
+  #     otherwise land its Ctrl-C as the *second* press → exit. Escape-first
+  #     means we can never fire two consecutive Ctrl-C across resumes.
+  #   - exactly ONE Ctrl-C here.
+  #   - the bracketed paste below immediately re-adds input, which disarms
+  #     the "press again to exit" prompt that a Ctrl-C on an empty box arms.
+  # So there is never a second consecutive Ctrl-C.
   tmux send-keys -t "$pane" Escape
-  tmux send-keys -t "$pane" C-u
+  sleep 0.2
+  tmux send-keys -t "$pane" C-c
+  sleep 0.2
   # Use bracketed paste (paste-buffer -p) instead of send-keys for the
   # slash command. In Claude TUI v2.1.x the slash-command picker intercepts
   # keystrokes typed after `/` and eats the first ~5 chars as filter input,
@@ -89,6 +109,15 @@ while IFS=' ' read -r pane root_pid; do
   tmux delete-buffer -b cc-heel
   sleep 0.4
   tmux send-keys -t "$pane" Enter
+  # /remote-control opens a MODAL "Remote Control" panel ("Enter to select ·
+  # Esc to continue") that BLOCKS all further input until dismissed. Send Esc
+  # to dismiss it — this KEEPS the (re)established connection but unblocks the
+  # session. Essential because the skip-alive check above can miss (the RC
+  # websocket is often held by a child pid, not claude_pid), so we routinely
+  # fire /remote-control on already-connected sessions that survived suspend;
+  # without this Esc they'd be left wedged on the panel, unable to take input.
+  sleep 0.6
+  tmux send-keys -t "$pane" Escape
   heeled=$((heeled + 1))
 done < <(tmux list-panes -a -F '#{pane_id} #{pane_pid}')
 

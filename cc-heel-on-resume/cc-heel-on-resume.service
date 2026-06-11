@@ -12,12 +12,19 @@ RestartSec=5
 # itself with a 5s backoff which is enough for transient bus blips.
 
 # Hardening: read-only filesystem view except for the user runtime dir
-# (where the tmux socket lives) and a couple of obvious user paths the
-# heel script touches transitively.
+# and a couple of obvious user paths the heel script touches transitively.
+#
+# PrivateTmp MUST be false: tmux's socket lives at /tmp/tmux-$UID/default
+# (the real /tmp), NOT in %t/XDG_RUNTIME_DIR as originally assumed. With
+# PrivateTmp=true the service got an isolated empty /tmp and every run
+# failed at `tmux list-sessions` with "no tmux server, exit" — silently
+# no-op'ing on every resume. ProtectSystem=strict keeps /tmp read-only as
+# a mount, but connecting to the unix socket does not require a writable
+# mount, so list + send-keys both work. (Verified 2026-06-11.)
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=%t %h/.local/bin
-PrivateTmp=true
+PrivateTmp=false
 NoNewPrivileges=true
 
 [Install]
