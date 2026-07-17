@@ -7,6 +7,27 @@ A user-level [Claude Code](https://claude.com/claude-code) skill for two pet-ope
 
 Useful when you want several Claudes running in parallel, each in its own character, each independently attachable — and a quick way to revive the ones that lapse.
 
+## This repo is a small skills collection
+
+Three sibling skills live here, each its own directory with a `SKILL.md`, each
+independently symlinkable into `~/.claude/skills/`:
+
+- **`breed-claude`** (repo root) — spawn/heel/resume **Claude** sessions with
+  personalities + remote-control (this file).
+- **[`breed-codex/`](./breed-codex/)** — the **Codex** counterpart: spawn and drive
+  headless `codex` agents in tmux (breed / send / goal / reinit / done-file / kill).
+- **[`santaing/`](./santaing/)** — the multi-agent **orchestration policy**: run a
+  dynamic fleet of tmux agents as "Santa + little helpers", where Santa owns the
+  checkout/pushes/gate and helpers only implement + run the cheap check. Composes the
+  two breed skills. Repo-/VCS-/build-tool-agnostic.
+
+```bash
+# install all three
+ln -s "$PWD/breed-codex" ~/.claude/skills/breed-codex
+ln -s "$PWD/santaing"    ~/.claude/skills/santaing
+# (breed-claude itself: the repo root is symlinked as ~/.claude/skills/breed-claude)
+```
+
 ## Trigger phrases
 
 ### Breed (spawn a new one)

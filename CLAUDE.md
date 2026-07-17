@@ -1,27 +1,45 @@
 # breed-claude — agent guide
 
-This repo is a user-level Claude Code skill at `~/.claude/skills/breed-claude/`,
-with its own git remote (`git@github.com:887/breed-claude.git`). It ships two
-things:
+This repo is a user-level Claude Code **skills collection** at
+`~/.claude/skills/breed-claude/`, with its own git remote
+(`git@github.com:887/breed-claude.git`). It ships **three sibling skills** plus a
+companion service:
 
-1. The skill itself (`SKILL.md`) — recipes for **BREED** (spawn a fresh Claude
-   in a tmux session with a personality preloaded) and **HEEL** (recover a
-   spawn whose remote-control bridge has gone idle).
-2. A companion systemd user service in `cc-heel-on-resume/` — runs `heel`
-   automatically on every wake-from-suspend.
+1. **`breed-claude`** (repo root `SKILL.md`) — recipes for **BREED** (spawn a fresh
+   Claude in a tmux session with a personality preloaded) and **HEEL** (recover a spawn
+   whose remote-control bridge has gone idle), plus RESUME / PACK-* pack operations.
+2. **`breed-codex/SKILL.md`** — the Codex counterpart: spawn and drive headless `codex`
+   agents in tmux (BREED-CODEX / SEND / GOAL / REINIT / DONE-FILE / KILL-RESTART).
+3. **`santaing/SKILL.md`** — the multi-agent orchestration *policy*: run a dynamic fleet
+   of tmux agents as "Santa + little helpers", Santa owning checkout/pushes/gate,
+   helpers only implementing + running the cheap check. Composes 1 and 2. Fully
+   repo-/VCS-/build-tool-agnostic — no project name is hardwired.
+4. A companion systemd user service in `cc-heel-on-resume/` — runs `heel` automatically
+   on every wake-from-suspend.
 
-`SKILL.md` is the source of truth for what BREED and HEEL do at the recipe
-level. `README.md` is the user-facing intro. This file (`CLAUDE.md`) covers
-**operating on the repo itself** — installing the auto-heel service, editing
-the scripts, the gotchas you can't infer from reading the code.
+Each skill dir has its own `SKILL.md` (the source of truth for that skill's recipes)
+and `README.md` (user-facing intro). This file (`CLAUDE.md`) covers **operating on the
+repo itself** — installing the auto-heel service, editing the scripts, the gotchas you
+can't infer from reading the code.
+
+**Each skill is symlinked into `~/.claude/skills/` independently** — the repo root as
+`breed-claude`, and `breed-codex/` + `santaing/` as their own entries — so Claude Code
+discovers all three as separate invocable skills. When adding a new skill dir here,
+symlink it in and it becomes invocable.
 
 ## Layout
 
 ```
 breed-claude/
-├── SKILL.md                              # the BREED + HEEL recipes (loaded at skill-invoke time)
-├── README.md                             # user-facing intro
+├── SKILL.md                              # BREED + HEEL + RESUME + PACK-* (breed-claude skill)
+├── README.md                             # collection intro + breed-claude
 ├── CLAUDE.md                             # this file
+├── breed-codex/                          # the Codex-agent skill
+│   ├── SKILL.md
+│   └── README.md
+├── santaing/                             # the fleet-orchestration skill
+│   ├── SKILL.md
+│   └── README.md
 └── cc-heel-on-resume/                    # companion systemd user service
     ├── cc-heel-on-resume.service         # systemd unit (Type=simple, Restart=always)
     ├── cc-heel-watcher                   # gdbus listener for PrepareForSleep
