@@ -38,9 +38,13 @@ Nothing here is tied to a specific repo, VCS, or build tool. Throughout, substit
   `<GATE>`**, fixes gate failures, resolves conflicts, and **merges**. You pull each
   helper's changes into `<TARGET>` and you are the only one who touches the remote.
 - **Helpers only**: implement in their **own isolated workspace**, and may run the
-  **cheap `<CHECK>`** to sanity-check their edits. They do **not** push, do **not**
-  run the full `<GATE>`/clippy/lint sweep (wasteful and not their job), do **not**
-  merge, and do **not** touch the canonical checkout or each other's workspace.
+  **cheap, scope-limited `<CHECK>`** (e.g. `cargo check -p <touched-crate>`) to
+  sanity-check their edits. They do **not** push, do **not** run the full
+  `<GATE>`/whole-project clippy/lint/test sweep — not just because it's wasteful and
+  not their job, but because **each full build cold-populates that workspace's own
+  multi-GB output tree (`target/` etc.), times N helpers in parallel, which fills the
+  disk** (see the disk/artifact hard rule below) — do **not** merge, and do **not**
+  touch the canonical checkout or each other's workspace.
 
 If you remember one thing: **helpers `<CHECK>`; Santa `<GATE>` + push + merge.** Santa
 is the only one at the sleigh.
@@ -202,6 +206,30 @@ its subagents' work in its own workspace and hands the single result up to you.
 
 - **Only Santa pushes, runs `<GATE>`, and merges.** Helpers run `<CHECK>` at most.
   This is the whole point; if a helper pushes, the discipline is gone.
+- **Heavy builds live in ONE checkout — never multiplied across the N helper
+  workspaces (the disk/artifact bomb).** Every isolated `<WORKSPACE-NEW>` has its
+  **own build-output tree** (`target/`, `node_modules/.cache`, `__pycache__`, a Go
+  build cache, …). A **full**, whole-project build — a workspace-wide lint
+  (`cargo clippy --workspace --all-targets --all-features`), a full test sweep
+  (`cargo nextest run` / `go test ./...` / the whole `pytest`), or any cold
+  build-the-world — cold-populates a **multi-GB output tree, times N helpers, in
+  parallel**. That slows every machine to a crawl and can **fill the disk to the
+  point the whole run dies**. So:
+  - **Helpers run ONLY the cheap, scope-limited `<CHECK>`** in their workspace
+    (`cargo check -p <touched-crate>`, `tsc --noEmit` on the touched project) —
+    never `--all-targets`/`--all-features`/a full sweep there.
+  - **The full `<GATE>` and any whole-project verification/closeout run once,
+    SEQUENTIALLY, in the single canonical checkout** — one **warm** output tree
+    reused across every slice, not N cold ones. Finish one slice's gate+merge, then
+    the next; don't fan the heavy builds back out.
+  - If the closeout must itself be driven by an agent, point **one dedicated
+    closeout helper at the canonical checkout** (not at each slice's own workspace),
+    so the heavy builds still hit a single output tree while the original helpers
+    stay parked in their workspaces.
+  - **Reclaim each helper's workspace as its slice merges** (drop the workspace + its
+    output tree; e.g. `jj workspace forget <name>` + remove the dir) so idle
+    multi-GB targets don't pile up. Watch free disk across the run; if it drops
+    toward a danger threshold, stop and reclaim before continuing.
 - **Every helper works in its own isolated `<WORKSPACE-NEW>`.** Never two agents in one
   checkout. In a colocated `<VCS>`, use its workspace mechanism, never a shared-HEAD
   worktree/checkout that would drag siblings onto another branch.
