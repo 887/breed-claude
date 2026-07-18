@@ -162,6 +162,12 @@ and must include **writing the unique `.done` file** on completion (DONE-FILE op
   with a SEND (answer a question, correct a wrong turn, re-point it). Don't let it spin
   — a wedged TUI gets an exit+relaunch (REINIT); a confused agent gets a corrective
   message; a crashed one gets re-bred.
+- **After unsticking, re-confirm the helper is back ON its goal.** Answering a prompt or
+  clearing a menu frequently leaves an autonomous agent **paused, not resumed** — a
+  codex drops to `Goal paused (/goal resume)` and then sits idle forever, never
+  signalling done. So every unstick ends with: capture the footer, and if it is not
+  actively pursuing, resume/re-set the goal. An unstuck helper that isn't pursuing its
+  goal is still effectively stuck — it just looks calm.
 - **Don't over-poll.** Prefer the done-file + a sane heartbeat over hammering
   `capture-pane`.
 
@@ -240,6 +246,13 @@ its subagents' work in its own workspace and hands the single result up to you.
   host-hook trigger strings.
 - **Wait for acknowledgement before setting a goal.** Confirm the helper understood the
   brief; only then `/goal`.
+- **Keep every active helper on a LIVE goal — this is how they keep working.**
+  Autonomous helpers (codex especially — it's lazy) only keep grinding while a goal is
+  active; a plain message will NOT sustain a long run, and a goal silently **pauses**
+  after any interruption. So: after the brief is acknowledged → set the goal; after any
+  unstick/answer/correction → re-confirm it's `Pursuing goal` and resume if paused. A
+  helper off its goal produces nothing and never writes its done-file — it's silently
+  idle, not working.
 - **Unique, cleaned-up done-files.** Mint fresh (or delete stale first); delete on
   collect. A leftover `.done` is a false "finished".
 - **Map dependencies before parallelizing.** An unnoticed dependency edge becomes a

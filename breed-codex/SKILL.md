@@ -178,6 +178,16 @@ Codex supports a `/goal` that keeps it working until the goal is achieved (the f
 shows `Pursuing goal (Ns)` while active and `Goal achieved (Nm)` when done). Set it
 like any message.
 
+**Why this is non-optional for autonomous work: codex is LAZY without a live goal.**
+A codex that is *not* on an active goal stops the moment it answers your last message
+and sits idle at the `›` prompt — a plain message (even a to-do list, or "keep
+going") does **not** sustain a long autonomous grind; only an active `/goal` does.
+Worse, a goal can silently **drop out**: after codex answers an interstitial prompt,
+gets unstuck from a menu, or hits a pause, the footer often flips to `Goal paused
+(/goal resume)` — and in that state it will sit idle **forever**, never reaching its
+done-condition and never writing its done-file. So "is it *still* Pursuing goal?" is
+something an orchestrator must **verify**, never assume.
+
 ## Recipe
 
 Given a session `<S>` and goal text:
@@ -199,6 +209,15 @@ Given a session `<S>` and goal text:
   implemented and would pass the local check; then write the done-file; do not merge."
 - **Encode the guardrails in the goal**, not just a prior message — the goal is what
   persists across the codex's autonomous loop.
+- **Autonomous work REQUIRES an active `/goal` — codex does not self-continue without
+  one.** If you want it to grind to completion, set a `/goal`; never rely on a normal
+  message to keep a codex working over a long task. No goal ⇒ it answers once and idles.
+- **Re-confirm the goal after ANY interruption.** Every time you answer a codex prompt,
+  clear a menu, or send a correction, capture the footer afterward: if it is not
+  `Pursuing goal`, send `/goal resume` (or re-set the goal). A `Goal paused (/goal
+  resume)` footer means it has **stopped** and needs resuming — otherwise it idles
+  silently and never writes its done-file. Treat an unstuck-but-not-pursuing codex as
+  still stuck.
 
 ---
 
