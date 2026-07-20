@@ -277,6 +277,11 @@ completion event-based rather than poll-based.
   "finished" when it isn't. Mint-fresh-or-delete-first, and delete on collect.
 - **Done-file is a signal, not the result.** It says "come look"; the real evidence is
   the branch/commit the codex pushed to its workspace and its reported check status.
+- **A done-file alone is NOT enough — see santaing's edge-triggered watcher.** It
+  encodes only "finished and remembered to write it", and is structurally silent when
+  the codex is blocked on a dialog, quit early, or died. Pair it with
+  `santaing/watch-elves.sh`, which disambiguates *idle-with-report* (finished) from
+  *idle-without-report* (gave up) and catches keypress-blocking dialogs.
 - **Belt and suspenders.** Pair the done-file watch with a periodic pane check-in so a
   crashed codex (which never writes the file) is still noticed.
 

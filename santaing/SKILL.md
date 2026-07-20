@@ -151,25 +151,71 @@ Once acknowledged, set the helper's **`/goal`** (GOAL op) so it runs to completi
 autonomously. The goal must restate the terminal done-condition and the guardrails,
 and must include **writing the unique `.done` file** on completion (DONE-FILE op).
 
-### 3. Monitor (event-based, with a heartbeat)
+### 3. Monitor — an EDGE-TRIGGERED watcher, not a done-file
 
-- **Primary signal: the done-file.** Watch each helper's unique `.done` path (a
-  `Monitor`/until-loop on `test -f`, or a periodic check). Event-based beats polling.
-- **Heartbeat check-in.** On a cadence (e.g. every ~30 min, or whenever the user loops
-  you), capture each live helper's pane. A crashed/stuck helper never writes its
-  done-file, so the heartbeat is what catches it.
-- **If a helper is stuck**, read its tmux pane to see what it's blocked on; unblock it
-  with a SEND (answer a question, correct a wrong turn, re-point it). Don't let it spin
-  — a wedged TUI gets an exit+relaunch (REINIT); a confused agent gets a corrective
-  message; a crashed one gets re-bred.
-- **After unsticking, re-confirm the helper is back ON its goal.** Answering a prompt or
-  clearing a menu frequently leaves an autonomous agent **paused, not resumed** — a
-  codex drops to `Goal paused (/goal resume)` and then sits idle forever, never
-  signalling done. So every unstick ends with: capture the footer, and if it is not
-  actively pursuing, resume/re-set the goal. An unstuck helper that isn't pursuing its
-  goal is still effectively stuck — it just looks calm.
-- **Don't over-poll.** Prefer the done-file + a sane heartbeat over hammering
-  `capture-pane`.
+**A `.done` file encodes exactly ONE state: "finished AND remembered to write it".**
+It is structurally silent on every real failure mode:
+
+- blocked on a dialog waiting for a keypress (update prompt, hook-trust prompt,
+  "retry with a faster model" — each blocks *forever* and says nothing);
+- went idle without writing a report (quit early, goal silently paused);
+- the tmux session died;
+- still "working" but thrashing the machine.
+
+Those are the failures that actually cost hours, and a done-file cannot express any
+of them — it just never appears, so **"not there yet" looks identical to "dead 40
+minutes ago."**
+
+**Arm a persistent watcher instead** (`watch-elves.sh`, shipped next to this file),
+run through the `Monitor` tool so each stdout line becomes one event:
+
+```bash
+<skill-dir>/watch-elves.sh <report-dir> codex codex2 codex3
+```
+
+It emits seven signals, and **only on a state transition**:
+
+| Event | Trigger | Your response |
+|---|---|---|
+| `REPORT-READY` | report file appears (+ line count + first 300 chars) | verify → integrate → gate → push |
+| `DIALOG` | pane matches an update / trust / allow / retry prompt | send the keypress |
+| `WORKING` | pane shows a tool call in flight | nothing — it's healthy |
+| `IDLE-STALL` | N idle ticks, **no** report | re-nudge; it quit early |
+| `IDLE-DONE` | idle **with** a report | collect and integrate |
+| `DEAD` | `tmux has-session` fails | re-breed that helper |
+| `DISK`/`MEM` | `< 60G` free, or `> 4G` swapped | stagger the builds, reclaim a workspace |
+
+**Four design rules that make it work — keep them if you rewrite it:**
+
+- **Edge-triggered, never level-triggered.** It stores prior state per helper and
+  speaks only on a transition, so a helper working 40 minutes produces exactly ONE
+  `WORKING` line, not 40. Otherwise monitoring itself floods your context — which is
+  the very problem monitoring was supposed to solve.
+- **`IDLE-STALL` vs `IDLE-DONE` is the whole trick.** Same observable condition (the
+  pane stopped moving); the presence of the report file disambiguates *finished* from
+  *gave up*. This is precisely the distinction a bare `.done` file cannot make, and
+  "helper went idle with gates red" is the single most common way a fleet silently
+  stops making progress.
+- **Debounce idle by 2 ticks.** Codex briefly stops printing between tool calls; a
+  1-tick trigger cries wolf constantly.
+- **Guard the machine, not just the fleet.** N concurrent Rust builds is exactly the
+  shape that fills a disk. The resource check wakes you *before* the machine dies
+  instead of after.
+
+**Portability:** state lives in files, not `declare -A` — macOS ships bash 3.2, which
+has no associative arrays. (Learned the hard way: the first version died instantly on
+`declare: -A: invalid option`.) A restarted watcher therefore resumes with its
+edge-detection intact instead of re-announcing everything.
+
+**After unsticking, re-confirm the helper is back ON its goal.** Answering a prompt or
+clearing a menu frequently leaves an autonomous agent **paused, not resumed** — a
+codex drops to `Goal paused (/goal resume)` and then sits idle forever. Every unstick
+ends with: capture the footer, and if it is not actively pursuing, resume/re-set the
+goal. An unstuck helper that isn't pursuing its goal is still effectively stuck — it
+just looks calm. (The watcher will tell you: it reappears as `IDLE-STALL`.)
+
+**Arm it at dispatch time, not later.** "No watcher armed" is a real failure the user
+will feel as silence.
 
 ### 4. Collect + integrate (Santa)
 
@@ -253,12 +299,16 @@ its subagents' work in its own workspace and hands the single result up to you.
   unstick/answer/correction → re-confirm it's `Pursuing goal` and resume if paused. A
   helper off its goal produces nothing and never writes its done-file — it's silently
   idle, not working.
-- **Unique, cleaned-up done-files.** Mint fresh (or delete stale first); delete on
-  collect. A leftover `.done` is a false "finished".
+- **Unique, cleaned-up report files.** Mint fresh (or delete stale first); delete on
+  collect. A leftover report is a false "finished" — and it will also make the watcher
+  call a fresh assignment `IDLE-DONE` the moment it pauses.
+- **Arm the watcher at dispatch time.** A fleet running with no watcher is a fleet you
+  will discover is dead 40 minutes late. The report file alone cannot tell you.
 - **Map dependencies before parallelizing.** An unnoticed dependency edge becomes a
   merge conflict. Base dependent slices deliberately.
 - **Don't over-subscribe or busy-wait.** Idle helpers are fine; scheduling dependent
-  work in parallel is not. Prefer event-based (done-file) monitoring over pane-polling.
+  work in parallel is not. Never hand-poll `capture-pane` in a loop — arm the
+  edge-triggered watcher (step 3) and let it wake you.
 - **Reinit for new work.** Old context bleeds into new slices — `/clear` or
   exit+relaunch (or close+re-breed the session) before a brand-new assignment.
 - **Intent over wording.** These recipes are defaults; adapt the choreography to the
@@ -280,7 +330,8 @@ helpers out on X"* / *"orchestrate the codexes to build Y"*:
 3. **Initialize each** — reinit for clean context; temp-file brief (read repo docs +
    the slice + guardrails); wait for acknowledgement.
 4. **Goal each** — set `/goal` with the terminal done-condition + the `.done` file.
-5. **Monitor** — watch done-files (event-based) + a heartbeat; unstick via the pane.
+5. **Monitor** — arm `watch-elves.sh` via `Monitor` at dispatch; act on its events
+   (`DIALOG` → keypress, `IDLE-STALL` → re-nudge, `DEAD` → re-breed, `DISK` → reclaim).
 6. **Integrate** — on each done: pull the change onto `<TARGET>`, resolve, run `<GATE>`,
    fix, **push** (Santa only).
 7. **Reassign** — hand finished helpers the next independent slice; repeat until the
