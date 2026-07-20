@@ -217,6 +217,19 @@ just looks calm. (The watcher will tell you: it reappears as `IDLE-STALL`.)
 **Arm it at dispatch time, not later.** "No watcher armed" is a real failure the user
 will feel as silence.
 
+**It disarms itself — and that is deliberate.** Once every watched helper is terminal
+(`IDLE-DONE` or `DEAD`) for two consecutive passes, it emits `FLEET-COMPLETE` and
+exits. `IDLE-STALL` is NOT terminal: a stalled helper needs a nudge, not abandonment,
+so the watch stays armed. Pass `WATCH_STAY=1` when you intend to reassign helpers and
+want one watcher across the whole session.
+
+Why this is built in rather than left to the orchestrator: an edge-triggered watcher
+with nothing left to report is **indistinguishable from one that is not running**. A
+forgotten watcher therefore polls a finished fleet indefinitely and stays silent about
+it — which is exactly how this was found (a watcher ran ~2.5 hours against an elf whose
+work had already been integrated). "Remember to stop it" is not a control when the
+failure mode is silence.
+
 ### 4. Collect + integrate (Santa)
 
 When a helper signals done:
@@ -233,6 +246,13 @@ When a helper signals done:
 5. **Push `<TARGET>`.** Only Santa pushes.
 
 ### 5. Reassign or wind down
+
+**Wind-down is a step, not an afterthought.** When the objective is done: confirm the
+watcher has disarmed (`FLEET-COMPLETE`, or stop it explicitly if you passed
+`WATCH_STAY=1`), delete the report files so a stale one cannot read as "finished" for
+the next assignment, and reclaim each helper's workspace and its multi-GB output tree.
+A fleet that is "done" but still holding watchers, reports, and workspaces is not done.
+
 
 - A finished helper gets its **next independent slice** (REINIT for clean context →
   initialize → goal). Schedule to keep progress flowing without over-subscribing

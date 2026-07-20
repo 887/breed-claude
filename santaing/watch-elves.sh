@@ -17,6 +17,13 @@
 #
 # Run it via the Monitor tool (persistent): each stdout line becomes one event.
 #
+# SELF-TERMINATING: once every watched session is terminal (IDLE-DONE or DEAD) for
+# two consecutive passes, it emits FLEET-COMPLETE and exits. A watcher must not be
+# able to outlive the fleet it watches — and because it is edge-triggered, a watcher
+# with nothing left to report is INDISTINGUISHABLE from one that is not running, so
+# "the orchestrator will remember to stop it" is not a control. Set WATCH_STAY=1 to
+# keep it armed across reassignments instead.
+#
 # Portability: state lives in files, not `declare -A` — macOS ships bash 3.2,
 # which has no associative arrays. This also means a restarted watcher resumes
 # with its edge-detection intact instead of re-announcing everything.
@@ -30,6 +37,8 @@ TICK="${WATCH_TICK:-60}"              # seconds between polls
 IDLE_TICKS="${WATCH_IDLE_TICKS:-2}"   # debounce: codex pauses between tool calls
 DISK_MIN_G="${WATCH_DISK_MIN_G:-60}"  # free-GB floor; 3 parallel Rust builds eat a disk
 SWAP_MAX_G="${WATCH_SWAP_MAX_G:-4}"   # swap ceiling; thrashing precedes the freeze
+
+STAY="${WATCH_STAY:-0}"               # 1 = never self-terminate (fleet gets reassigned)
 
 STATE_DIR="${WATCH_STATE_DIR:-${TMPDIR:-/tmp}/santa-watch-$$}"
 mkdir -p "$STATE_DIR"
@@ -74,12 +83,17 @@ resources() {
     fi
 }
 
+settled=0
 while true; do
+    terminal=0
+    total=0
     for s in "$@"; do
+        total=$(( total + 1 ))
         report="$REPORT_DIR/$s.done"
 
         if ! tmux has-session -t "$s" 2>/dev/null; then
             transition "$s" dead "DEAD $s — tmux session gone; re-breed it"
+            terminal=$(( terminal + 1 ))
             continue
         fi
 
@@ -114,7 +128,23 @@ while true; do
                 fi
             fi
         fi
+        case "$(state_get "$s" state '')" in
+            idle-done) terminal=$(( terminal + 1 )) ;;
+        esac
     done
     resources
+
+    # Wind down when the whole fleet is terminal. Confirmed over two passes so a
+    # session caught mid-relaunch cannot end the watch early.
+    if [ "$STAY" != 1 ] && [ "$terminal" -eq "$total" ]; then
+        settled=$(( settled + 1 ))
+        if [ "$settled" -ge 2 ]; then
+            emit "FLEET-COMPLETE all $total helper(s) terminal — disarming watcher"
+            exit 0
+        fi
+    else
+        settled=0
+    fi
+
     sleep "$TICK"
 done
