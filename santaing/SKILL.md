@@ -166,7 +166,15 @@ Those are the failures that actually cost hours, and a done-file cannot express 
 of them — it just never appears, so **"not there yet" looks identical to "dead 40
 minutes ago."**
 
-**Arm a persistent watcher instead** (`watch-elves.sh`, shipped next to this file),
+> **NEVER hand-roll `until [ -f <done> ]; do sleep …; done`.** That loop is
+> *exactly* the blindness this whole section exists to remove: it can only ever fire
+> on the one happy state and is structurally silent on a helper that blocked, paused
+> to ask you a question, quit early, or died — so you sit waiting on a corpse. Reading
+> this section and then writing that loop anyway (it has happened) defeats the point.
+> The reflex when you want to "wait for the helper" is to **arm `watch-elves.sh`**,
+> not to write a sleep-loop on the done-file.
+
+**Arm the persistent watcher instead** (`watch-elves.sh`, shipped next to this file),
 run through the `Monitor` tool so each stdout line becomes one event:
 
 ```bash
@@ -180,7 +188,7 @@ It emits seven signals, and **only on a state transition**:
 | `REPORT-READY` | report file appears (+ line count + first 300 chars) | verify → integrate → gate → push |
 | `DIALOG` | pane matches an update / trust / allow / retry prompt | send the keypress |
 | `WORKING` | pane shows a tool call in flight | nothing — it's healthy |
-| `IDLE-STALL` | N idle ticks, **no** report | re-nudge; it quit early |
+| `IDLE-STALL` | N idle ticks, **no** report | re-nudge; it quit early **or is waiting on you** — read the pane: a helper that stopped to surface a genuine blocker (a move-map conflict, a missing decision) shows up here too, and the right response is to answer it + resume its goal, not just poke it |
 | `IDLE-DONE` | idle **with** a report | collect and integrate |
 | `DEAD` | `tmux has-session` fails | re-breed that helper |
 | `DISK`/`MEM` | `< 60G` free, or `> 4G` swapped | stagger the builds, reclaim a workspace |
