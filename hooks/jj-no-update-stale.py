@@ -14,6 +14,15 @@ snapshotting a *stale* workspace **fails**, because jj refuses to run there. So
 the obvious defensive sequence — snapshot first, then update-stale — silently
 no-ops on step one and then destroys the work on step two.
 
+REPRODUCED on jj 0.42.0, and the recipe is worth writing down because two obvious
+routes do NOT work: rewriting the other workspace's working-copy commit, and
+abandoning it, both leave it healthy — jj rebases the descendant and the next
+command there snapshots normally, files intact. What DOES make it stale is
+`jj op restore <older-op>` in another workspace. Then `jj workspace update-stale`
+reports `Added 0 files, modified 0 files, removed 2 files` and both the
+un-snapshotted file and a snapshotted-then-rolled-back one are gone from disk. The
+un-snapshotted one has no op-log entry, so nothing can bring it back.
+
 An agent cannot tell from the outside whether the target workspace is clean, so
 the only safe default is to stop and let a human look. Deciding whether those
 files matter is a judgement call, not something to automate.
