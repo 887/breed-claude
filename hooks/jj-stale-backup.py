@@ -16,6 +16,15 @@ refuses to run there. So the obvious defensive sequence — "snapshot first, the
 update-stale" — silently no-ops on step one and then destroys the work on step
 two. Doing the careful thing by hand is not enough.
 
+REPRODUCED on jj 0.42.0, and the recipe is worth writing down because two obvious
+routes do NOT work: rewriting the other workspace's working-copy commit, and
+abandoning it, both leave it healthy — jj rebases the descendant and the next
+command there snapshots normally, files intact. What DOES make it stale is
+`jj op restore <older-op>` in another workspace. Then `jj workspace update-stale`
+reports `Added 0 files, modified 0 files, removed 2 files` and both the
+un-snapshotted file and a snapshotted-then-rolled-back one are gone from disk. The
+un-snapshotted one has no op-log entry, so nothing can bring it back.
+
 This is the only hook here that **takes an action** instead of just refusing one:
 it copies the workspace source, then allows the command. Worst case you lose
 nothing and have a directory to restore from. If the copy fails, the command is
@@ -55,7 +64,6 @@ backup, whose location is printed on stderr).
 import json
 import os
 import shutil
-import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -159,6 +167,23 @@ def main() -> int:
         return 0
 
     where = target_directory(payload, command)
+
+    # A `cd "$T/ws"` reaches the hook UNEXPANDED: the variable is set inside the
+    # command, so it exists only in the shell that has not run yet, and no amount
+    # of looking at the environment will resolve it. Measured live. Blocking is
+    # right (guessing the wrong tree would back up the wrong files and then allow
+    # the clobber), but the generic "cannot resolve" message sent me looking for a
+    # bad path instead of the real cause, so name it.
+    if any(ch in where for ch in "$`"):
+        return block(
+            f"the `cd` target contains an unexpanded shell variable ('{where}').",
+            "The variable is set inside this same command, so the hook cannot see "
+            "its value —",
+            "and guessing would back up the wrong tree while still allowing the "
+            "overwrite.",
+            "Run it with the path written out:",
+            "    cd /abs/path/to/workspace && jj workspace update-stale")
+
     if not Path(where).is_dir():
         return block(
             f"cannot resolve the workspace directory for update-stale "

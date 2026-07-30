@@ -57,6 +57,14 @@ run 2 "after another command"          'jj st; jj workspace update-stale'
 run 2 "through bash -c"                "bash -c 'jj workspace update-stale'"
 run 2 "with -R before the subcommand"  'jj -R /tmp workspace update-stale'
 run 2 "chained with &&"                'jj workspace list && jj workspace update-stale'
+# MEASURED live: `cd "$T/ws" && jj workspace update-stale` reaches the hook with
+# `$T` UNEXPANDED, because the variable is set inside this same command and the
+# shell has not run yet. Still blocked — guessing a tree would back up the wrong
+# files and then allow the clobber — but the message must name the variable rather
+# than report a missing path, which is what sent me hunting the wrong cause.
+run 2 "cd through an unexpanded var"   'cd "$T/ws" && jj workspace update-stale'
+run 2 "unexpanded var, no quotes"      'cd $WS && jj workspace update-stale'
+run 2 "command substitution in the cd" 'cd "$(pwd)/ws" && jj workspace update-stale'
 
 echo
 echo "== must PASS: not this command at all =="
