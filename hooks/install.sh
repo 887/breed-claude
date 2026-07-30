@@ -72,11 +72,11 @@ echo "user-scope hooks:"
 link_in "$SRC/rg-flag-gate.py"              "$HOME/.claude/hooks"
 link_in "$SRC/jj-no-interactive.py"         "$HOME/.claude/hooks"
 link_in "$SRC/git-no-interactive.py"        "$HOME/.claude/hooks"
-link_in "$SRC/jj-stale-backup.py"           "$HOME/.claude/hooks"
+link_in "$SRC/jj-no-update-stale.py"           "$HOME/.claude/hooks"
 link_in "$SRC/tests/rg-flag-gate.sh"        "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/jj-no-interactive.sh"   "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/git-no-interactive.sh"  "$HOME/.claude/hooks/tests"
-link_in "$SRC/tests/jj-stale-backup.sh"     "$HOME/.claude/hooks/tests"
+link_in "$SRC/tests/jj-no-update-stale.sh"     "$HOME/.claude/hooks/tests"
 
 command -v python3 >/dev/null 2>&1 || echo "WARNING: python3 not on PATH — every hook here needs it"
 
@@ -89,14 +89,14 @@ Now merge the registration by hand (this script will not touch settings.json).
     { "type": "command", "command": "python3 $HOME/.claude/hooks/rg-flag-gate.py" },
     { "type": "command", "command": "python3 $HOME/.claude/hooks/jj-no-interactive.py" },
     { "type": "command", "command": "python3 $HOME/.claude/hooks/git-no-interactive.py" },
-    { "type": "command", "command": "python3 $HOME/.claude/hooks/jj-stale-backup.py" }
+    { "type": "command", "command": "python3 $HOME/.claude/hooks/jj-no-update-stale.py" }
   ] } ] } }
 
 Then verify:
   bash ~/.claude/hooks/tests/rg-flag-gate.sh
   bash ~/.claude/hooks/tests/jj-no-interactive.sh
   bash ~/.claude/hooks/tests/git-no-interactive.sh
-  bash ~/.claude/hooks/tests/jj-stale-backup.sh
+  bash ~/.claude/hooks/tests/jj-no-update-stale.sh
   /hooks     (in-session; all four should be listed. Hooks hot-reload — if one is
              missing, that is real wiring breakage, not a stale session)
 SNIPPET

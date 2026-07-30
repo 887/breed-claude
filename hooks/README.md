@@ -17,7 +17,7 @@ files out.
 | `rg-flag-gate.py` | user (all projects) | `~/.claude/hooks/` | `python3` |
 | `jj-no-interactive.py` | user (all projects) | `~/.claude/hooks/` | `python3` |
 | `git-no-interactive.py` | user (all projects) | `~/.claude/hooks/` | `python3` |
-| `jj-stale-backup.py` | user (all projects) | `~/.claude/hooks/` | `python3` |
+| `jj-no-update-stale.py` | user (all projects) | `~/.claude/hooks/` | `python3` |
 
 `_shellscan.py` is a shared helper the others import, not a hook. It is not symlinked
 and does not need to be: each hook resolves its own symlink back into this repo,
@@ -123,11 +123,11 @@ policy, or branch naming — `git rebase <upstream>`, `git merge --no-ff`, and
 `git commit --amend --no-edit` all pass, because whether you *should* run them is
 the project's call, not this hook's.
 
-### `jj-stale-backup.py` — `jj workspace update-stale` destroys work unrecoverably
+### `jj-no-update-stale.py` — `jj workspace update-stale` destroys work unrecoverably
 
-The only hook here that **takes an action** rather than just refusing one: it
-copies the workspace source, then allows the command. If the copy fails, the
-command is blocked.
+Refused outright. An agent cannot tell from the outside whether the target
+workspace has un-snapshotted files in it, and if it does they are gone for good —
+so the only safe default is to stop and let a human look.
 
 When workspace A rebases or describes a commit that workspace B has checked out,
 jj marks B *stale*. `jj workspace update-stale` in B then re-checks-out the new
@@ -141,12 +141,24 @@ the obvious defensive sequence — snapshot first, then update-stale — silentl
 no-ops on step one and then destroys the work on step two. Being careful by hand
 is not sufficient, which is why this is mechanical.
 
-Excludes `target/`, `.jj`, `.git`, `node_modules` and friends, so the safety net
-copies source and not tens of GB of build output; refuses (rather than grinds) if
-the source still exceeds `JJ_STALE_BACKUP_MAX_MIB` (default 4096). Backups land in
-`~/.claude/jj-stale-backups/<timestamp>-<workspace>` — override with
-`JJ_STALE_BACKUP_DIR`. Skip the whole thing with
-`JJ_ALLOW_UNSAFE_UPDATE_STALE=1`.
+Rescue procedure, named in the block message: read what is on disk (jj cannot help
+— that is the problem), `cp -a <workspace> /tmp/ws-rescue`, then deliberately
+`JJ_ALLOW_UNSAFE_UPDATE_STALE=1 jj workspace update-stale`, then put back what you
+rescued. If the workspace is empty or disposable, the override alone is the whole
+procedure.
+
+An earlier cut of this hook took the backup *itself* — tar the workspace, then
+allow the command. That was too much: a gate that copies gigabytes is doing work
+the human should be deciding about, and it made the failure modes (disk full,
+partial copy, excludes wrong) the gate's problem rather than obviously nobody's.
+Refusing is smaller, and it puts the judgement where it belongs.
+
+The override is scoped **per command segment**, not across the whole string.
+Checking the string was an accidental escape hatch:
+`JJ_ALLOW_UNSAFE_UPDATE_STALE=1 ls; jj workspace update-stale` would have disabled
+the gate for a command the override was never attached to. It does carry into
+`bash -c '…'`, because there it really does reach the inner command through the
+environment. Both directions are regression cases.
 
 **Why user scope, emphatically.** It encodes a fact about jj, so it passes the bar
 like its siblings. But it also *cannot work* as a project hook. Project hooks are
@@ -157,8 +169,8 @@ enforces **zero** gate legs — verified by running a command the project gate
 should have blocked and watching it sail through to jj untouched. That is exactly
 the multi-workspace arrangement where staleness arises and where update-stale gets
 run, so a project-scoped copy of this guard is inert precisely when it is needed.
-Anything protecting against **irreversible data loss** has to be user scope for
-that reason alone.
+Anything standing between an agent and **irreversible data loss** has to be user
+scope for that reason alone.
 
 ## What does NOT belong here
 
@@ -223,7 +235,7 @@ hooks to save a paste is a bad trade.
   { "type": "command", "command": "python3 $HOME/.claude/hooks/rg-flag-gate.py" },
   { "type": "command", "command": "python3 $HOME/.claude/hooks/jj-no-interactive.py" },
   { "type": "command", "command": "python3 $HOME/.claude/hooks/git-no-interactive.py" },
-  { "type": "command", "command": "python3 $HOME/.claude/hooks/jj-stale-backup.py" }
+  { "type": "command", "command": "python3 $HOME/.claude/hooks/jj-no-update-stale.py" }
 ] } ] } }
 ```
 
@@ -239,7 +251,7 @@ session. `/hooks` is read-only; there is no in-session approve step.
 bash tests/rg-flag-gate.sh         # 26 cases
 bash tests/jj-no-interactive.sh    # 50 cases
 bash tests/git-no-interactive.sh   # 119 cases
-bash tests/jj-stale-backup.sh      # 27 cases, incl. a real-workspace effect check
+bash tests/jj-no-update-stale.sh   # 33 cases
 ```
 
 Each harness invokes the **real** hook with synthetic `PreToolUse` payloads — no
