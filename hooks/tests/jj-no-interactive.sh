@@ -105,5 +105,29 @@ run 0 "a path merely ending in jj"     './tools/notjj describe'
 run 0 "no jj anywhere"                 'git status'
 
 echo
+echo "== a NEWLINE ends a command — line 2+ must be seen (measured: it was not) =="
+# `shlex` treats \n as plain whitespace, so `cd /tmp<newline>jj describe` lexed as ONE
+# segment whose command word is `cd`; the real command became mere arguments and
+# no gate saw it. Every hook here was bypassable by this shape.
+run 2 "gated command on line 2"        'cd /tmp
+jj describe'
+run 2 "after a heredoc block"          'cat <<EOF
+body
+EOF
+jj describe'
+run 0 "safe pair over two lines"       'cd /tmp
+jj st'
+run 0 "phrase inside a 2-line message" 'jj describe -m "line one
+line two: never run jj describe bare"'
+
+echo
+echo "== the override is scoped to the command it prefixes, like a shell =="
+run 2 "override on another segment"    'JJ_GATE_ALLOW_INTERACTIVE=1 ls; jj describe'
+run 2 "override merely echoed"         'echo "JJ_GATE_ALLOW_INTERACTIVE=1" && jj describe'
+run 0 "override prefixing THIS command" 'JJ_GATE_ALLOW_INTERACTIVE=1 jj describe'
+run 0 "exported override carries"      'export JJ_GATE_ALLOW_INTERACTIVE=1
+jj describe'
+
+echo
 echo "passed=$pass failed=$fail"
 [ "$fail" -eq 0 ]

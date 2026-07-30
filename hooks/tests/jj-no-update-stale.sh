@@ -82,5 +82,24 @@ run 2 "override on the FIRST of two"   'JJ_ALLOW_UNSAFE_UPDATE_STALE=1 jj st && 
 run 0 "override reaches into bash -c"  "JJ_ALLOW_UNSAFE_UPDATE_STALE=1 bash -c 'jj workspace update-stale'"
 
 echo
+echo "== a NEWLINE ends a command — line 2+ must be seen (measured: it was not) =="
+# `shlex` treats \n as plain whitespace, so `cd /tmp<newline>jj workspace update-stale` lexed as ONE
+# segment whose command word is `cd`; the real command became mere arguments and
+# no gate saw it. Every hook here was bypassable by this shape.
+run 2 "gated command on line 2"        'cd /tmp
+jj workspace update-stale'
+run 2 "gated command on line 3"        'cd /tmp
+echo hi
+jj workspace update-stale'
+run 2 "after a heredoc block"          'cat <<EOF
+body
+EOF
+jj workspace update-stale'
+run 0 "mentioned in a 2-line message"  'jj describe -m "line one
+line two: never run jj workspace update-stale"'
+run 0 "exported override carries"      'export JJ_ALLOW_UNSAFE_UPDATE_STALE=1
+jj workspace update-stale'
+
+echo
 printf 'passed=%d failed=%d\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

@@ -24,6 +24,28 @@ and does not need to be: each hook resolves its own symlink back into this repo,
 so the module is found beside the real file. That is another reason these are
 symlinked rather than copied — a lone copied hook has no module to import.
 
+**Every gate is only as good as this module, so bugs here are bugs in all of them
+at once.** Two were found by measurement, not review, and both were silent:
+
+- **A newline did not end a command.** `shlex` treats `\n` as ordinary whitespace,
+  so `cd /tmp` + newline + `git commit` lexed as ONE segment whose command word is
+  `cd` — the real command became mere arguments and no gate saw it. Verified
+  bypassable on all four hooks (`git commit`, `git rebase -i`, `jj describe`,
+  `rg -rn`, `update-stale`), plus a project gate. Lines are now lexed one at a
+  time, and a line that does not lex is treated as an unterminated multi-line
+  *string* and joined with the next — which is what keeps a gated phrase quoted
+  inside a two-line commit message from reading as a command.
+- **An override was honoured command-wide.** `OVERRIDE=1 ls; <gated command>`
+  disabled the gate for a command the override was never attached to, and since a
+  quoted mention lexes to the same token, `echo "OVERRIDE=1"` disabled it too.
+  Assignments are now scoped the way a shell scopes them — via `invocations_env`,
+  which pairs each invocation with the env that applies to it — while still
+  carrying into `bash -c '…'` and forward from an `export`.
+
+Both fixes were confirmed by running the new cases against the pre-fix code: 14
+failures, all green after. A test that never failed against the broken version is
+not evidence.
+
 ### `rg-flag-gate.py` — ripgrep short flags that mean something else
 
 Two grep habits are silently wrong in ripgrep:

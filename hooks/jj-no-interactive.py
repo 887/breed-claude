@@ -56,7 +56,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _shellscan import has_env_assignment, invocations  # noqa: E402
+from _shellscan import invocations_env, overrides  # noqa: E402
 
 OVERRIDE = "JJ_GATE_ALLOW_INTERACTIVE"
 
@@ -115,8 +115,12 @@ def flag_value(args, names):
 
 def verdict(command):
     """Return a block reason, or None to allow."""
-    for word, args in invocations(command):
+    for word, args, env in invocations_env(command):
         if word != "jj":
+            continue
+        # Scoped per invocation: an override attached to a DIFFERENT
+        # command must not disengage the gate for this one.
+        if overrides(env, OVERRIDE):
             continue
         name, rest = subcommand(args)
         if name is None:
@@ -195,8 +199,6 @@ def main() -> int:
 
     command = payload.get("tool_input", {}).get("command", "")
     if not command or "jj" not in command:
-        return 0
-    if has_env_assignment(command, OVERRIDE):
         return 0
 
     reason = verdict(command)

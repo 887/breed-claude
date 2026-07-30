@@ -83,7 +83,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _shellscan import has_env_assignment, invocations  # noqa: E402
+from _shellscan import invocations_env, overrides  # noqa: E402
 
 OVERRIDE = "GIT_GATE_ALLOW_INTERACTIVE"
 
@@ -214,8 +214,12 @@ def commit_verdict(name, rest):
 
 def verdict(command):
     """Return (reason, note) to block, or None to allow."""
-    for word, args in invocations(command):
+    for word, args, env in invocations_env(command):
         if word != "git":
+            continue
+        # Scoped per invocation: an override attached to a DIFFERENT
+        # command must not disengage the gate for this one.
+        if overrides(env, OVERRIDE):
             continue
         name, rest = subcommand(args)
         if name is None:
@@ -358,8 +362,6 @@ def main() -> int:
 
     command = payload.get("tool_input", {}).get("command", "")
     if not command or "git" not in command:
-        return 0
-    if has_env_assignment(command, OVERRIDE):
         return 0
 
     found = verdict(command)

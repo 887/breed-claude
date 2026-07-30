@@ -189,5 +189,37 @@ run 0 "override as an assignment"      'GIT_GATE_ALLOW_INTERACTIVE=1 git commit'
 run 2 "override merely MENTIONED"      'echo "set GIT_GATE_ALLOW_INTERACTIVE=1" && git commit'
 
 echo
+echo "== a NEWLINE ends a command — line 2+ must be seen (measured: it was not) =="
+# `shlex` treats \n as plain whitespace, so `cd /tmp<newline>git commit` lexed as ONE
+# segment whose command word is `cd`; the real command became mere arguments and
+# no gate saw it. Every hook here was bypassable by this shape.
+run 2 "gated command on line 2"        'cd /tmp
+git commit'
+run 2 "gated command on line 3"        'echo one
+echo two
+git rebase -i main'
+run 2 "after a heredoc block"          'cat <<EOF
+body
+EOF
+git commit'
+run 0 "safe pair over two lines"       'cd /tmp
+git status'
+run 0 "phrase inside a 2-line message" 'git commit -m "line one
+line two: never run git rebase -i"'
+
+echo
+echo "== the override is scoped to the command it prefixes, like a shell =="
+# Measured escape: a command-wide search for the assignment let an override
+# attached to an UNRELATED command disable the gate, and a quoted mention lexes
+# to the identical token, so `echo "OVERRIDE=1"` disabled it too.
+run 2 "override on another segment"    'GIT_GATE_ALLOW_INTERACTIVE=1 ls; git commit'
+run 2 "override on another line"       'GIT_GATE_ALLOW_INTERACTIVE=1 ls
+git commit'
+run 0 "override prefixing THIS command" 'GIT_GATE_ALLOW_INTERACTIVE=1 git commit'
+run 0 "override reaches into bash -c"  "GIT_GATE_ALLOW_INTERACTIVE=1 bash -c 'git commit'"
+run 0 "exported override carries"      'export GIT_GATE_ALLOW_INTERACTIVE=1
+git commit'
+
+echo
 printf 'passed=%d failed=%d\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

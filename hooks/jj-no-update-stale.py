@@ -52,7 +52,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _shellscan import ASSIGNMENT, PREFIXES, segments, strip_heredoc_bodies  # noqa: E402
+from _shellscan import invocations_env, overrides  # noqa: E402
 
 OVERRIDE = "JJ_ALLOW_UNSAFE_UPDATE_STALE"
 
@@ -63,46 +63,21 @@ JJ_VALUE_FLAGS = {"-R", "--repository", "--at-op", "--at-operation", "--config",
                   "--config-toml", "--config-file", "--color"}
 
 
-SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
+def blocked_segment(command):
+    """True if some invocation RUNS `jj workspace update-stale` without the override.
 
-
-def blocked_segment(command, inherited_override=False):
-    """True if some segment RUNS `jj workspace update-stale` without the override.
-
-    The override is checked **per segment**, not across the whole command string.
-    A command-wide check is an accidental escape hatch: `JJ_ALLOW_UNSAFE_...=1 ls;
-    jj workspace update-stale` would disable the gate for a command the override
-    was never attached to. An env assignment only applies to the command it
-    prefixes, so the gate has to read it the same way the shell does.
+    The per-invocation env comes from `invocations_env`, which scopes an assignment
+    the way a shell does -- so `OVERRIDE=1 ls; jj workspace update-stale` does NOT
+    disengage the gate, while a prefix on this command (or on a `bash -c` wrapping
+    it, where it really does reach through the environment) does. That walk used to
+    live here; it is shared now because two sibling gates had the unscoped bug and
+    a third copy is how the next one gets it wrong too.
     """
-    for segment in segments(strip_heredoc_bodies(command)):
-        index, overridden = 0, inherited_override
-        while index < len(segment) and (
-            ASSIGNMENT.match(segment[index]) or segment[index] in PREFIXES
-        ):
-            if segment[index] == f"{OVERRIDE}=1":
-                overridden = True
-            index += 1
-        if index >= len(segment):
+    for word, args, env in invocations_env(command):
+        if word != "jj" or overrides(env, OVERRIDE):
             continue
 
-        word = Path(segment[index]).name
-        args = segment[index + 1:]
-
-        # `bash -c '…'` really does run what is inside, so scan it. An override
-        # prefixing the shell reaches the inner command through the environment,
-        # so it carries down.
-        if word in SHELLS and "-c" in args:
-            nested = args.index("-c") + 1
-            if nested < len(args) and blocked_segment(args[nested], overridden):
-                return True
-            continue
-
-        if word != "jj":
-            continue
-
-        words = []
-        position = 0
+        words, position = [], 0
         while position < len(args):
             token = args[position]
             if token in JJ_VALUE_FLAGS:
@@ -114,7 +89,7 @@ def blocked_segment(command, inherited_override=False):
             words.append(token)
             position += 1
 
-        if words[:2] == ["workspace", "update-stale"] and not overridden:
+        if words[:2] == ["workspace", "update-stale"]:
             return True
     return False
 

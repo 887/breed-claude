@@ -74,5 +74,21 @@ run 0 "subshell boundary"             "(rg -n pat f); tar -rf a.tar b"
 run 0 "no rg at all"                  "grep -E 'a|b' file"
 
 echo
+echo "== a NEWLINE ends a command — line 2+ must be seen (measured: it was not) =="
+# `shlex` treats \n as plain whitespace, so `cd /tmp<newline>rg -rn pat .` lexed as ONE
+# segment whose command word is `cd`; the real command became mere arguments and
+# no gate saw it. Every hook here was bypassable by this shape.
+run 2 "bad flag on line 2"            'cd /tmp
+rg -rn pat .'
+run 2 "bad flag after a heredoc"       'cat <<EOF
+body
+EOF
+rg -rn pat .'
+run 0 "safe rg over two lines"         'cd /tmp
+rg -n pat .'
+run 0 "flag named in a 2-line message" 'git commit -m "note
+never pass rg -rn here"'
+
+echo
 echo "passed=$pass failed=$fail"
 [ "$fail" -eq 0 ]

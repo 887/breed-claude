@@ -71,15 +71,7 @@ def strip_heredoc_bodies(command: str) -> str:
     return "\n".join(kept)
 
 
-def segments(command: str) -> list:
-    """Split into command segments on real shell operators."""
-    try:
-        lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
-        lexer.whitespace_split = True
-        tokens = list(lexer)
-    except ValueError:
-        return []  # unbalanced quotes: let the shell report it
-
+def _split_on_operators(tokens: list) -> list:
     out, current = [], []
     for token in tokens:
         if token and all(ch in OPERATORS for ch in token):
@@ -97,40 +89,98 @@ def segments(command: str) -> list:
     return out
 
 
-def invocations(command: str) -> list:
-    """Every (command-word, args) pair actually being run.
+def segments(command: str) -> list:
+    """Split into command segments on real shell operators AND newlines.
+
+    A NEWLINE ENDS A COMMAND, and missing that made every gate here bypassable by
+    the most ordinary shape there is. `shlex` treats `\\n` as plain whitespace, so
+    `cd /tmp\\ngit commit` lexed as ONE segment whose command word is `cd` --
+    `git commit` became mere arguments and no gate saw it. Measured against all
+    four hooks plus a project gate: `git commit`, `git rebase -i`,
+    `jj describe`, `rg -rn` and a squash on line 2 ALL passed. A heredoc made it
+    worse, because the surviving delimiter word took the next line's command
+    position (`cat <<EOF … EOF\\ngit commit` -> command word `EOF`).
+
+    So lines are lexed one at a time. A line that does not lex (an unbalanced
+    quote) is a multi-line QUOTED STRING rather than a syntax error, so it is
+    joined with the next line and retried -- which is what keeps a multi-line
+    commit message a single token, and therefore keeps a gated phrase quoted
+    inside one from being read as a command.
+    """
+    out, buffer = [], ""
+    for line in command.split("\n"):
+        buffer = line if not buffer else f"{buffer}\n{line}"
+        try:
+            lexer = shlex.shlex(buffer, posix=True, punctuation_chars=True)
+            lexer.whitespace_split = True
+            tokens = list(lexer)
+        except ValueError:
+            continue  # unterminated quote: the string continues on the next line
+        out.extend(_split_on_operators(tokens))
+        buffer = ""
+    return out
+
+
+def invocations_env(command: str, inherited: frozenset = frozenset()) -> list:
+    """Every (command-word, args, env) actually being run.
+
+    `env` is the set of assignments that APPLY to that invocation, read the way a
+    shell scopes them: an assignment PREFIX applies to the command it prefixes and
+    nothing else, while an assignment-only segment (or an `export`) carries forward
+    to the commands after it.
+
+    Getting this wrong is an escape hatch, not a nicety. A gate that looked for its
+    override anywhere in the command string was disabled by
+    `OVERRIDE=1 ls; <gated command>` -- an override attached to a command it was
+    never meant for -- and even by `echo "OVERRIDE=1"` naming it, since after
+    lexing that quoted mention is the same token. Measured on two gates; four
+    escape shapes, all silent.
 
     The command word has its directory stripped, so `/opt/homebrew/bin/rg` is
     recognised as `rg` while `./tools/notjj` is NOT recognised as `jj`.
     """
-    found = []
+    found, carried = [], set(inherited)
     for segment in segments(strip_heredoc_bodies(command)):
-        index = 0
+        env, index = set(carried), 0
         while index < len(segment) and (
             ASSIGNMENT.match(segment[index]) or segment[index] in PREFIXES
         ):
+            if ASSIGNMENT.match(segment[index]):
+                env.add(segment[index])
             index += 1
+
         if index >= len(segment):
+            # Assignment-only segment: it survives for the rest of the shell.
+            carried = env
             continue
-        word, args = segment[index], segment[index + 1:]
-        found.append((Path(word).name, args))
-        if Path(word).name in SHELLS and "-c" in args:
+
+        word, args = Path(segment[index]).name, segment[index + 1:]
+        if word == "export":
+            carried |= {token for token in args if ASSIGNMENT.match(token)}
+            continue
+
+        found.append((word, args, frozenset(env)))
+        if word in SHELLS and "-c" in args:
+            # An override prefixing the shell reaches the inner command through
+            # the environment, so it carries down.
             nested = args.index("-c") + 1
             if nested < len(args):
-                found.extend(invocations(args[nested]))
+                found.extend(invocations_env(args[nested], frozenset(env)))
     return found
 
 
-def has_env_assignment(command: str, name: str, value: str = "1") -> bool:
-    """True if `name=value` appears as an environment ASSIGNMENT.
+def invocations(command: str) -> list:
+    """Every (command-word, args) pair being run, ignoring environment."""
+    return [(word, args) for word, args, _ in invocations_env(command)]
 
-    Deliberately not a substring test: an override named inside a quoted string
-    or a heredoc must NOT disable a gate, or documenting the override in prose
-    would silently switch it off.
+
+def overrides(env: frozenset, name: str, value: str = "1") -> bool:
+    """True if `name=value` is in the env that applies to ONE invocation.
+
+    Pair it with `invocations_env`, never with a whole-command search. The
+    predecessor of this function took the command string and answered "does this
+    assignment appear anywhere", which meant an override attached to an unrelated
+    command -- or merely quoted in an `echo` -- switched the gate off. Scoping is
+    the whole point, so the scope is now the only thing you can ask about.
     """
-    target = f"{name}={value}"
-    for segment in segments(strip_heredoc_bodies(command)):
-        for token in segment:
-            if token == target:
-                return True
-    return False
+    return f"{name}={value}" in env
