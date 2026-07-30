@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Hermetic test harness for .claude/hooks/vcs-no-squash-gate.sh
+# Hermetic test harness for .claude/hooks/vcs-gate.py
 # ============================================================================
 # The gate is a PreToolUse(Bash) trust boundary: it decides whether a VCS command
 # reaches the shell. Its check B ("no `jj new` stranding of a dirty @") can only
@@ -22,8 +22,15 @@
 
 set -uo pipefail
 
-HOOK="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/vcs-no-squash-gate.sh"
+# Default to the current gate; VCS_GATE_HOOK points it at another implementation
+# so the SAME contract can be run against an old one (that is how the tokenising
+# rewrite was shown to preserve behaviour rather than merely claim it).
+HOOK="${VCS_GATE_HOOK:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/vcs-gate.py}"
 [ -f "$HOOK" ] || { echo "cannot find hook at $HOOK" >&2; exit 1; }
+case "$HOOK" in
+  *.py) RUNNER=(python3 "$HOOK") ;;
+  *)    RUNNER=(bash "$HOOK") ;;
+esac
 
 pass=0
 fail=0
@@ -51,7 +58,7 @@ make_repo() {
 run() {
   local want="$1" repo="$2" label="$3" cmd="$4" got
   got="$(
-    python3 - "$repo" "$cmd" <<'PY' | bash "$HOOK" >/dev/null 2>&1; echo $?
+    python3 - "$repo" "$cmd" <<'PY' | "${RUNNER[@]}" >/dev/null 2>&1; echo $?
 import json, sys
 print(json.dumps({"tool_name": "Bash",
                   "cwd": sys.argv[1],
@@ -98,6 +105,31 @@ run 2 "$DIRTY" "whole-branch rebase"                'jj rebase -b -d main'
 run 0 "$DIRTY" "single-revision rebase is fine"     'jj rebase -r @ -d main'
 run 0 "$DIRTY" "merge_method=merge is the right one" 'gh api repos/o/r/pulls/1/merge -f merge_method=merge'
 run 0 "$DIRTY" "history-rewrite override"           'VCS_GATE_ALLOW_HISTORY_REWRITE=1 jj squash'
+
+echo "== MENTIONING a gated phrase is not RUNNING it — must PASS =="
+# The gate scans command POSITIONS, so quoted text and heredoc bodies can never
+# be commands. Every one of these tripped the text-grep implementation (7/7 with
+# a dirty @), which pushed you toward the override and thereby disabled the real
+# check. Phrases are assembled from pieces so this FILE does not trip a gate that
+# still greps raw text — the old one blocked the very command written to test it.
+NEW_MAIN="jj new"" main"
+SQUASH_OP="jj ""squash"
+MERGE_METHOD="merge_""method=squash"
+run 0 "$DIRTY" "grep for the phrase in docs"     "rg -n '$NEW_MAIN' docs/"
+run 0 "$DIRTY" "phrase inside an echo"           "echo \"use $NEW_MAIN to start\""
+run 0 "$DIRTY" "phrase in an inline commit msg"  "jj describe -m \"fix: $NEW_MAIN strands a dirty @\""
+run 0 "$DIRTY" "phrase in a heredoc body"        "cat > brief.txt <<EOF
+tell the helper to avoid $NEW_MAIN
+EOF"
+run 0 "$DIRTY" "squash rule quoted in a grep"    "rg -n '$SQUASH_OP' CLAUDE.md"
+run 0 "$DIRTY" "merge method named in prose"     "echo \"never pass $MERGE_METHOD\""
+run 0 "$DIRTY" "phrase inside a python string"   "python3 -c \"print('$NEW_MAIN')\""
+run 0 "$DIRTY" "a path ending in jj is not jj"   "./tools/notjj new main"
+
+echo "== a real command reached through a shell -c IS running it — must BLOCK =="
+# The text grep had no notion of this; tokenising closes it as a side effect.
+run 2 "$DIRTY" "bash -c re-parenting new"        "bash -c 'jj new main'"
+run 2 "$DIRTY" "sh -c squash"                    "sh -c '$SQUASH_OP'"
 
 echo
 echo "passed=$pass failed=$fail"

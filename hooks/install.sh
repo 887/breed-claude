@@ -79,11 +79,9 @@ if [ -n "$REPO" ]; then
   # A repo that TRACKS its own .claude/hooks owns that file — foundlings does, and
   # replacing a tracked file with a symlink would commit the symlink. link_in
   # reports the difference instead of forcing it; that is intended, not a gap.
-  link_in "$SRC/vcs-no-squash-gate.sh"       "$REPO/.claude/hooks"
-  link_in "$SRC/tests/vcs-no-squash-gate.sh" "$REPO/.claude/hooks/tests"
-  for tool in jq jj; do
-    command -v "$tool" >/dev/null 2>&1 || echo "  WARNING: '$tool' not on PATH — vcs-no-squash-gate needs it"
-  done
+  link_in "$SRC/vcs-gate.py"       "$REPO/.claude/hooks"
+  link_in "$SRC/tests/vcs-gate.sh" "$REPO/.claude/hooks/tests"
+  command -v jj >/dev/null 2>&1 || echo "  WARNING: 'jj' not on PATH — vcs-gate needs it to ask whether @ is empty"
 fi
 
 command -v python3 >/dev/null 2>&1 || echo "WARNING: python3 not on PATH — rg-flag-gate needs it"
@@ -99,12 +97,12 @@ Now merge the registration by hand (this script will not touch settings.json).
 
 <repo>/.claude/settings.json:
   { "hooks": { "PreToolUse": [ { "matcher": "Bash", "hooks": [
-    { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/vcs-no-squash-gate.sh\"", "timeout": 30 }
+    { "type": "command", "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/vcs-gate.py\"", "timeout": 30 }
   ] } ] } }
 
 Then verify:
   bash ~/.claude/hooks/tests/rg-flag-gate.sh
-  bash <repo>/.claude/hooks/tests/vcs-no-squash-gate.sh
+  bash <repo>/.claude/hooks/tests/vcs-gate.sh
   /hooks     (in-session; the hook should be listed. Project hooks hot-reload —
              if it is missing, that is real wiring breakage, not a stale session)
 SNIPPET

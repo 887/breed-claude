@@ -14,7 +14,7 @@ don't copy the files out.
 | Hook | Scope | Installs to | Needs |
 | --- | --- | --- | --- |
 | `rg-flag-gate.py` | user (all projects) | `~/.claude/hooks/` | `python3` |
-| `vcs-no-squash-gate.sh` | project (any `jj` repo) | `<repo>/.claude/hooks/` | `bash`, `jq`, `jj` |
+| `vcs-gate.py` | project (any `jj` repo) | `<repo>/.claude/hooks/` | `python3`, `jj` |
 
 Scope is a property, not a folder — the table states it, so the files stay flat
 and either one can be installed at either scope if you want it there.
@@ -38,7 +38,7 @@ Impossible under any rendering theory, exactly what `--replace=n` does.
 Long forms pass through: say `--replace=` or `--encoding=` and the gate agrees
 you meant it.
 
-### `vcs-no-squash-gate.sh` — two independent VCS safety checks
+### `vcs-gate.py` — two independent VCS safety checks
 
 Each carries its **own** override, so disabling one never disables the other.
 
@@ -58,6 +58,34 @@ mistake is silent. The right move when `@` is dirty is `jj rebase -r @ -d <targe
 
 Never blocked: the child-of-`@` forms (`jj new`, `jj new @`), or an already-empty
 `@` where there is nothing to strand.
+
+**What check B actually does, measured** — not data loss, silent displacement. jj
+snapshots the working copy into `@` before any command, then `jj new <target>`
+makes a *new* empty commit off the target the working copy:
+
+```
+BEFORE  @ = ylrtnzww  empty=false   wip.txt on disk
+AFTER   @ = qvkkkymv  empty=true    wip.txt GONE from the working dir
+        ylrtnzww  empty=false  <- content safe, now an unnamed head
+```
+
+The content is recoverable via `jj log`, but the files vanish from your directory
+and `jj st` says "no changes". If you then bookmark and push you push the **empty**
+commit. The recommended remedy is verified too: `jj rebase -r @ -d <target>` keeps
+the same change ID, moves the parent, and leaves the files in place.
+
+**It scans command POSITIONS, not command text.** This is what makes it usable.
+The original shell version pattern-matched the raw string, so any command that
+merely *mentioned* a gated phrase was blocked — `rg 'jj squash' CLAUDE.md`, an
+`echo` explaining the rule, an inline `jj describe -m` whose message quotes it, a
+heredoc brief telling a helper what to avoid. Measured against a dirty `@`: **7 of
+7** such commands tripped. It was self-demonstrating: the shell command written to
+*test* the false positive was blocked by its own test data. Now the string is
+segmented on real shell operators, each segment's command word is resolved
+(skipping env assignments and `sudo`/`env`/`time`), and a check fires only when
+that word is actually `jj` or `gh` — so quoted text, which stays one token, can
+never be a command. Heredoc bodies are stripped as data, and `bash -c '…'` is
+recursed into, which closes a false *negative* the text grep could not even see.
 
 Check A is jj/gh-specific but repo-agnostic. The overrides were named
 `FOUNDLINGS_ALLOW_*` while the hook lived in one project; they were renamed to
@@ -111,7 +139,7 @@ hooks to save a paste is a bad trade.
 
 ```json
 { "hooks": { "PreToolUse": [ { "matcher": "Bash", "hooks": [
-  { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/vcs-no-squash-gate.sh\"", "timeout": 30 }
+  { "type": "command", "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/vcs-gate.py\"", "timeout": 30 }
 ] } ] } }
 ```
 
@@ -124,8 +152,8 @@ stale session. `/hooks` is read-only; there is no in-session approve step.
 ## Tests
 
 ```sh
-bash tests/rg-flag-gate.sh          # 26 cases
-bash tests/vcs-no-squash-gate.sh    # 21 cases, builds throwaway jj repos
+bash tests/rg-flag-gate.sh   # 26 cases
+bash tests/vcs-gate.sh       # 31 cases, builds throwaway jj repos
 ```
 
 Both harnesses invoke the **real** hook with synthetic `PreToolUse` payloads —
@@ -152,7 +180,7 @@ command boundary, so a later command's flag gets attributed to the gated one.
   opaque token matching no separator. Fixed by lexing with
   `punctuation_chars=True` so operators arrive as their own tokens. Caught a
   real `-r` belonging to `jj file list`.
-- `vcs-no-squash-gate.sh` cut its segment at the first `;&|`, so
+- `vcs-gate.py` (then a shell script) cut its segment at the first `;&|`, so
   `jj new 2>&1 | tail` reduced to the fragment `2>` — not a flag, not `@`, so it
   was read as a revset target. Fixed by stripping redirections before the
   positional scan.
