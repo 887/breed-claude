@@ -24,6 +24,12 @@
 # Does NOT touch settings.json. That file is hand-owned and may carry other hooks;
 # merging JSON blind to save one paste risks silently dropping someone else's gate.
 # The snippet is printed at the end.
+#
+# DOES write exactly one config key: `snapshot.auto-update-stale = false` in jj's
+# USER config, reported on stdout. Called out here because a script that quietly
+# rewrites your tool config is worse than one that asks. It is the only setting
+# that closes the stale-workspace path no hook can observe — see the block at the
+# bottom for the measurement, and README.md for the precedence caveat.
 
 set -euo pipefail
 
@@ -79,6 +85,40 @@ link_in "$SRC/tests/git-no-interactive.sh"  "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/jj-no-update-stale.sh"     "$HOME/.claude/hooks/tests"
 
 command -v python3 >/dev/null 2>&1 || echo "WARNING: python3 not on PATH — every hook here needs it"
+
+# Pin `snapshot.auto-update-stale = false` at user scope.
+#
+# This is the half of the stale-workspace hazard NO hook can catch. The setting
+# decides what jj does when it NOTICES staleness: with `true`, jj updates the
+# workspace ITSELF, on any command at all. Measured on jj 0.42.0 — with
+# `auto-update-stale = true`, a plain `jj st` in a stale workspace printed
+# `removed 2 files` and destroyed an un-snapshotted file. `jj workspace
+# update-stale` was never typed, so jj-no-update-stale.py is structurally blind to
+# that path; only the config closes it.
+#
+# `false` is already jj 0.42's default, so this changes nothing today. It is
+# written explicitly because safe-BY-DEFAULT is not safe-BY-DECISION: a repo
+# config, an agent "fixing" a stale-workspace error, or a future change of default
+# would reopen the invisible path and nothing would announce it.
+#
+# Precedence, stated honestly: workspace > repo > user > built-in default. A
+# repo-scope `true` still beats this pin, so it is a defence against drift rather
+# than a guarantee.
+if command -v jj >/dev/null 2>&1; then
+  echo
+  echo "jj config:"
+  current="$(jj config get snapshot.auto-update-stale 2>/dev/null || echo unknown)"
+  if jj config list --user 2>/dev/null | grep -q 'snapshot.auto-update-stale = false'; then
+    printf '  already pinned  snapshot.auto-update-stale = false (user scope)\n'
+  elif jj config set --user snapshot.auto-update-stale false 2>/dev/null; then
+    printf '  pinned  snapshot.auto-update-stale = false (effective value was: %s)\n' "$current"
+    printf '          jj now REFUSES in a stale workspace rather than silently\n'
+    printf '          re-checking it out over your files.\n'
+  else
+    printf '  WARNING: could not set snapshot.auto-update-stale (jj too old?).\n'
+    printf '           Check by hand: jj config get snapshot.auto-update-stale\n'
+  fi
+fi
 
 cat <<'SNIPPET'
 

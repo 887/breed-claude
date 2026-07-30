@@ -1,7 +1,33 @@
 #!/usr/bin/env python3
-"""jj-no-update-stale — refuse `jj workspace update-stale`.
+"""jj-no-update-stale — make `jj workspace update-stale` a DELIBERATE act.
 
-## Why refuse it outright
+This does not forbid the command. It is the legitimate recovery when a workspace
+really is stale, and the override is one prefix away. What it forbids is reaching
+it *incidentally* — mid-task, as a reflex to get past an error — because the cost
+of being wrong is unrecoverable and an agent cannot see, from the outside, whether
+the target workspace holds un-snapshotted work.
+
+## The half of the hazard NO HOOK CAN SEE — pair this with the config
+
+`snapshot.auto-update-stale` decides what jj does when it *notices* staleness. With
+it set to `true`, jj updates the workspace ITSELF, on any command at all. Measured
+on jj 0.42.0: with `auto-update-stale = true`, a plain **`jj st`** in a stale
+workspace printed `removed 2 files` and destroyed both an un-snapshotted file and a
+snapshotted-then-rolled-back one. `jj workspace update-stale` was never typed — so
+this gate, which matches that command, is structurally blind to it.
+
+`false` is jj 0.42's default, and on that default jj refuses and tells you to run
+update-stale — which is where this gate picks up. Since the safe behaviour is a
+default rather than a setting, anything that flips it (a repo config, a helpful
+agent, a future change of default) silently reopens the invisible path. So
+`install.sh` PINS it false at user scope. Note the precedence honestly: a
+workspace- or repo-scope `true` still wins over the user scope, so the pin is a
+defence against drift, not a guarantee.
+
+Config closes the path you cannot see; this gate makes the path you can see
+deliberate.
+
+## Why the visible path is gated at all
 
 When workspace A rebases or describes a commit that workspace B has checked out,
 jj marks B **stale**. `jj workspace update-stale` in B re-checks-out the new
@@ -124,7 +150,11 @@ def main() -> int:
         f"    3. {OVERRIDE}=1 jj workspace update-stale\n"
         "    4. put back whatever you rescued\n"
         "\n"
-        f"  If the workspace is empty or disposable, step 3 alone is enough.\n")
+        f"  If the workspace is empty or disposable, step 3 alone is enough.\n"
+        "\n"
+        "  This is not a forbidden command — it is the real recovery for a genuinely\n"
+        "  stale workspace. What it must not be is a reflex for getting past an\n"
+        "  error, because the work it discards has no op-log entry to recover from.\n")
     return 2
 
 

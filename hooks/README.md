@@ -145,11 +145,39 @@ policy, or branch naming — `git rebase <upstream>`, `git merge --no-ff`, and
 `git commit --amend --no-edit` all pass, because whether you *should* run them is
 the project's call, not this hook's.
 
-### `jj-no-update-stale.py` — `jj workspace update-stale` destroys work unrecoverably
+### `jj-no-update-stale.py` — make `jj workspace update-stale` a deliberate act
 
-Refused outright. An agent cannot tell from the outside whether the target
-workspace has un-snapshotted files in it, and if it does they are gone for good —
-so the only safe default is to stop and let a human look.
+**Not a forbidden command.** It is the real recovery for a genuinely stale
+workspace, and the override is one prefix away. What the gate stops is reaching it
+*incidentally* — as a reflex to clear an error mid-task — because an agent cannot
+tell from the outside whether the target workspace holds un-snapshotted files, and
+if it does they are gone for good.
+
+#### Pair it with the config — one half of this hazard no hook can see
+
+`snapshot.auto-update-stale` decides what jj does when it *notices* staleness:
+
+| value | behaviour on a stale workspace | can a hook see it? |
+| --- | --- | --- |
+| `true` | jj re-checks-out the workspace **itself, on any command** | **No** |
+| `false` (jj 0.42 default) | jj refuses and tells you to run `update-stale` | Yes — that is this gate |
+
+Measured on jj 0.42.0 with `auto-update-stale = true`: a plain **`jj st`** in a
+stale workspace printed `removed 2 files` and destroyed an un-snapshotted file.
+`jj workspace update-stale` was never typed, so a gate matching that command is
+structurally blind to it. With the setting `false`, the same `jj st` errors and the
+file survives — verified both ways.
+
+So `install.sh` **pins `snapshot.auto-update-stale = false` at user scope.** That
+changes nothing today, because it is already the default — the point is that
+safe-by-*default* is not safe-by-*decision*: a repo config, an agent "fixing" a
+stale-workspace error, or a future change of default would reopen the invisible
+path with nothing to announce it. Precedence, honestly: workspace > repo > user >
+default, so a repo-scope `true` still wins. It is a defence against drift, not a
+guarantee.
+
+**Config closes the path you cannot see; the gate makes the path you can see
+deliberate.**
 
 When workspace A rebases or describes a commit that workspace B has checked out,
 jj marks B *stale*. `jj workspace update-stale` in B then re-checks-out the new
@@ -227,6 +255,12 @@ shape, merge method, branch policy) → belongs to that codebase, in its own
 ```sh
 ./install.sh
 ```
+
+Two things happen: the hooks are symlinked into `~/.claude/hooks/`, and one jj
+config key is pinned — `snapshot.auto-update-stale = false` at user scope, reported
+on stdout (see the stale-workspace gate above for why, and for the precedence
+caveat). That is the **only** config the script writes; it does not touch
+`settings.json`, and it never writes a project-scoped anything.
 
 **Symlinks, not copies** — per the hard rule in [`../CLAUDE.md`](../CLAUDE.md):
 this repo is the source of truth, so every install points back at a checkout and
