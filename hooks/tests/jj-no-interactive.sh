@@ -55,6 +55,15 @@ run 2 "after a pipe"                   'echo x | jj describe'
 run 2 "through bash -c"                "bash -c 'jj split'"
 run 2 "with a global flag first"       'jj -R /some/repo describe'
 run 2 "chained after a safe command"   'jj st && jj describe'
+# MEASURED: with a description on BOTH source and destination, `jj squash` opens an
+# editor to combine them and hangs. Which shape you are in depends on repo state
+# the hook cannot see, so an explicit -m or -u is required. Two cases below used to
+# be asserted as PASS on the assumption that naming paths or a destination avoided
+# the prompt — that was never measured, and it is wrong.
+run 2 "squash with no message"         'jj squash'
+run 2 "squash by path still prompts"   'jj squash src/lib.rs'
+run 2 "squash --into still prompts"    'jj squash --into @-'
+run 2 "squash --editor beats -m"       'jj squash -m "msg" --editor'
 
 echo "== must PASS: non-interactive forms, the whole point of the gate =="
 run 0 "describe with -m"               'jj describe -m "a message"'
@@ -63,8 +72,11 @@ run 0 "describe with --message"        'jj describe --message "a message"'
 run 0 "describe from a file"           'jj describe -m "$(cat msg.txt)"'
 run 0 "describe --stdin"               'cat msg.txt | jj describe --stdin'
 run 0 "commit with -m"                 'jj commit -m "a message"'
-run 0 "squash by path"                 'jj squash src/lib.rs'
-run 0 "squash --into"                  'jj squash --into @-'
+run 0 "squash with -m"                 'jj squash -m "combined"'
+run 0 "squash -m plus a path"          'jj squash -m "combined" src/lib.rs'
+run 0 "squash -u keeps dest message"   'jj squash -u'
+run 0 "squash --use-destination-msg"   'jj squash --use-destination-message --into @-'
+run 0 "squash --help is not a squash"  'jj squash --help'
 run 0 "restore by path"               'jj restore --from @- src/lib.rs'
 run 0 "resolve --list is read-only"    'jj resolve --list'
 run 0 "resolve -l short form"          'jj resolve -l'

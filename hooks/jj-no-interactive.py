@@ -23,7 +23,13 @@ Verified against jj 0.4x `jj help` output rather than assumed:
                               ("Starts an editor to let you edit the
                               description"; `jj commit` with no path args is
                               documented as equivalent to `jj describe`)
-  --editor                    on describe             -> drop it; it FORCES an
+  squash             with no -m/--message/--stdin     -> -m "msg", or -u to keep
+                              and no -u/--use-destination-  the destination's
+                              message. MEASURED: prompts to  description
+                              COMBINE when source AND
+                              destination both have a
+                              description, and hangs
+  --editor                    on describe/commit/squash -> drop it; it FORCES an
                               editor even alongside -m/--stdin
   split                       always                  -> "Starts a diff editor";
                                                          use `jj new` + moves, or
@@ -89,6 +95,13 @@ def subcommand(args):
     return None, []
 
 
+def has_message(args):
+    """True if a message is supplied inline, in either the spaced or `=` form."""
+    return bool(MESSAGE_FLAGS & set(args)) or any(
+        token.startswith(("-m=", "--message=")) for token in args
+    )
+
+
 def flag_value(args, names):
     """Value of the first of `names` present, as `--flag v` or `--flag=v`."""
     for index, token in enumerate(args):
@@ -109,6 +122,12 @@ def verdict(command):
         if name is None:
             continue
 
+        # Asking for help never runs the thing. This is not hypothetical: the
+        # predecessor of this hook blocked `jj squash --help`, which is how the
+        # squash rule below came to be written in the first place.
+        if {"-h", "--help"} & set(args):
+            continue
+
         if {"-i", "--interactive"} & set(rest):
             return (f"`jj {name} -i/--interactive` opens an editor, which an agent "
                     "cannot answer.\n"
@@ -126,19 +145,33 @@ def verdict(command):
         if name in ALWAYS_INTERACTIVE:
             return ALWAYS_INTERACTIVE[name]
 
-        if name in {"describe", "commit"}:
+        if name in {"describe", "commit", "squash"}:
             if "--editor" in rest:
                 return (f"`jj {name} --editor` FORCES an editor open even with "
                         "-m/--stdin.\n"
                         "    Instead: drop --editor and pass the whole message to -m.")
-            if not (MESSAGE_FLAGS & set(rest)) and not any(
-                t.startswith(("-m=", "--message=")) for t in rest
-            ):
-                return (f"`jj {name}` with no -m/--message opens $EDITOR for the "
-                        "description.\n"
-                        f"    Instead: `jj {name} -m \"your message\"`.\n"
-                        "    For a long message, write it to a file and use\n"
-                        f"    `jj {name} -m \"$(cat msg.txt)\"` or `--stdin`.")
+
+        # `jj squash` prompts to COMBINE descriptions when the source and the
+        # destination both have one — measured: editor opens and hangs. Which shape
+        # you are in depends on repo state the hook cannot see from the command
+        # string, so the safe default is to require an explicit choice. Both escapes
+        # are cheap and both were verified non-interactive, so this is not a dead
+        # end: -m sets the message, -u keeps the destination's.
+        if name == "squash" and not has_message(rest) and not (
+            {"-u", "--use-destination-message"} & set(rest)
+        ):
+            return ("`jj squash` opens an editor to COMBINE descriptions when the "
+                    "source and\n"
+                    "    destination both have one (jj cannot know which you meant).\n"
+                    "    Instead: `jj squash -m \"combined message\"`, or\n"
+                    "    `jj squash -u` to keep the destination's description as-is.")
+
+        if name in {"describe", "commit"} and not has_message(rest):
+            return (f"`jj {name}` with no -m/--message opens $EDITOR for the "
+                    "description.\n"
+                    f"    Instead: `jj {name} -m \"your message\"`.\n"
+                    "    For a long message, write it to a file and use\n"
+                    f"    `jj {name} -m \"$(cat msg.txt)\"` or `--stdin`.")
 
         # `resolve` needs BOTH escapes acknowledged: --list only inspects, and a
         # builtin `--tool :ours`/`:theirs` resolves without opening anything. The
