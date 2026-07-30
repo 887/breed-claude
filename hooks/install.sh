@@ -64,11 +64,17 @@ link_in() {         # link_in <src-file> <dest-dir>
   fi
 }
 
+# `_shellscan.py` is NOT symlinked and does not need to be: each hook does
+# `Path(__file__).resolve()`, which follows its own symlink back into this repo,
+# so the shared module is found beside the real file. That is also why these must
+# be symlinked rather than copied — a lone copied hook has no module to import.
 echo "user-scope hooks:"
-link_in "$SRC/rg-flag-gate.py"        "$HOME/.claude/hooks"
-link_in "$SRC/tests/rg-flag-gate.sh"  "$HOME/.claude/hooks/tests"
+link_in "$SRC/rg-flag-gate.py"              "$HOME/.claude/hooks"
+link_in "$SRC/jj-no-interactive.py"         "$HOME/.claude/hooks"
+link_in "$SRC/tests/rg-flag-gate.sh"        "$HOME/.claude/hooks/tests"
+link_in "$SRC/tests/jj-no-interactive.sh"   "$HOME/.claude/hooks/tests"
 
-command -v python3 >/dev/null 2>&1 || echo "WARNING: python3 not on PATH — rg-flag-gate needs it"
+command -v python3 >/dev/null 2>&1 || echo "WARNING: python3 not on PATH — both hooks need it"
 
 cat <<'SNIPPET'
 
@@ -76,11 +82,13 @@ Now merge the registration by hand (this script will not touch settings.json).
 
 ~/.claude/settings.json:
   { "hooks": { "PreToolUse": [ { "matcher": "Bash", "hooks": [
-    { "type": "command", "command": "python3 $HOME/.claude/hooks/rg-flag-gate.py" }
+    { "type": "command", "command": "python3 $HOME/.claude/hooks/rg-flag-gate.py" },
+    { "type": "command", "command": "python3 $HOME/.claude/hooks/jj-no-interactive.py" }
   ] } ] } }
 
 Then verify:
   bash ~/.claude/hooks/tests/rg-flag-gate.sh
-  /hooks     (in-session; the hook should be listed. Hooks hot-reload — if it is
+  bash ~/.claude/hooks/tests/jj-no-interactive.sh
+  /hooks     (in-session; both hooks should be listed. Hooks hot-reload — if one is
              missing, that is real wiring breakage, not a stale session)
 SNIPPET

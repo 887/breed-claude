@@ -15,6 +15,12 @@ files out.
 | Hook | Scope | Installs to | Needs |
 | --- | --- | --- | --- |
 | `rg-flag-gate.py` | user (all projects) | `~/.claude/hooks/` | `python3` |
+| `jj-no-interactive.py` | user (all projects) | `~/.claude/hooks/` | `python3` |
+
+`_shellscan.py` is a shared helper both import, not a hook. It is not symlinked
+and does not need to be: each hook resolves its own symlink back into this repo,
+so the module is found beside the real file. That is another reason these are
+symlinked rather than copied — a lone copied hook has no module to import.
 
 ### `rg-flag-gate.py` — ripgrep short flags that mean something else
 
@@ -37,6 +43,34 @@ meant it.
 
 This qualifies as shareable because it encodes a fact about **ripgrep**, not a
 preference about a codebase. It is wrong to type `rg -rn` anywhere, by anyone.
+
+### `jj-no-interactive.py` — jj commands that would open an editor and hang
+
+An agent has no terminal to type into. A jj command that opens `$EDITOR`, a diff
+editor, or a merge tool therefore does **not fail** — it waits forever, holding
+the tool call open until it times out. Nothing errors, nothing prints, and the
+transcript shows a command that simply never returned. For unattended work that
+is the worst failure shape there is: no signal at all.
+
+Blocked, with the non-interactive form named in the message. Each rule was read
+off `jj help` rather than assumed:
+
+| Blocked | Use instead |
+| --- | --- |
+| `-i` / `--interactive`, any subcommand | select with explicit paths |
+| `--tool <t>` — jj's own help says it *implies* `--interactive` | omit it; `--tool :ours`/`:theirs`/`:none` are non-interactive builtins and **do** pass |
+| `describe` / `commit` with no `-m`/`--message`/`--stdin` | `-m "msg"`, or `-m "$(cat msg.txt)"` for a long one |
+| `--editor` — forces an editor open *even alongside* `-m` | drop it |
+| `split` — "Starts a diff editor", always | `jj new` + `jj squash --into`, or squash by path |
+| `diffedit` — exists only to open a diff editor | edit files and let jj snapshot, or `jj restore --from` |
+| `resolve` with neither `-l/--list` nor a builtin tool | `--list` to inspect, then edit the real conflict markers |
+
+Override for a human at a real terminal: `JJ_GATE_ALLOW_INTERACTIVE=1`.
+
+This qualifies as shareable on the same test as the rg gate: it encodes a fact
+about **jj plus the absence of a tty**, true in every repository. Note what it
+deliberately does *not* do — it takes no position on squashing, merge method, or
+commit shape. Those are project decisions and belong to the project.
 
 ## What does NOT belong here
 
@@ -98,7 +132,8 @@ hooks to save a paste is a bad trade.
 
 ```json
 { "hooks": { "PreToolUse": [ { "matcher": "Bash", "hooks": [
-  { "type": "command", "command": "python3 $HOME/.claude/hooks/rg-flag-gate.py" }
+  { "type": "command", "command": "python3 $HOME/.claude/hooks/rg-flag-gate.py" },
+  { "type": "command", "command": "python3 $HOME/.claude/hooks/jj-no-interactive.py" }
 ] } ] } }
 ```
 
@@ -111,11 +146,14 @@ session. `/hooks` is read-only; there is no in-session approve step.
 ## Tests
 
 ```sh
-bash tests/rg-flag-gate.sh   # 26 cases
+bash tests/rg-flag-gate.sh        # 26 cases
+bash tests/jj-no-interactive.sh   # 43 cases
 ```
 
-The harness invokes the **real** hook with synthetic `PreToolUse` payloads — no
-double of the hook itself.
+Each harness invokes the **real** hook with synthetic `PreToolUse` payloads — no
+double of the hook itself. Neither needs a repo: both decide from the command
+string alone, which is the point — a command that would hang must be refused
+*before* it runs, not diagnosed after.
 
 Every case asserts **both** directions. A gate is only trustworthy once it has
 been observed *blocking* what it must block; a suite that only checked the pass

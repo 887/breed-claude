@@ -23,16 +23,12 @@ PreToolUse hook on Bash. Exit 2 = block, with the stderr message shown back.
 """
 
 import json
-import shlex
 import sys
+from pathlib import Path
 
-# Tokens that may precede a command name without ending the pipeline.
-PREFIXES = {"xargs", "time", "sudo", "env", "command", "then", "do", "else", "!"}
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-# Characters that, alone or in a run, form a shell control/redirection operator.
-# Any token made only of these ends the current command, so a flag after it
-# belongs to a DIFFERENT command and must not be attributed to rg.
-PUNCTUATION = set(";|&<>()")
+from _shellscan import invocations  # noqa: E402
 
 BAD = {
     "r": (
@@ -57,47 +53,24 @@ BAD = {
 
 
 def offending_flag(command: str) -> "tuple[str, str] | None":
-    """Return (token, flag-letter) for the first bad rg short flag, else None."""
-    # `punctuation_chars=True` makes the lexer return shell operators as their
-    # OWN tokens, which plain `shlex.split` does not. Without it, an operator
-    # glued to adjacent text -- `2>/dev/null;`, `cmd|rg`, `2>&1` -- arrives as
-    # one opaque token that matches no separator, so the command boundary is
-    # missed, `in_rg` never resets, and the NEXT command's `-r` is blamed on rg.
-    # That false positive fired on `… | rg …; jj file list -r main`, where the
-    # `-r` is jj's. Splitting on real operators is what makes the scan track
-    # command boundaries rather than guess at them.
-    try:
-        lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
-        lexer.whitespace_split = True
-        tokens = list(lexer)
-    except ValueError:
-        # Unbalanced quotes: not our problem, let the shell report it.
-        return None
+    """Return (token, flag-letter) for the first bad rg short flag, else None.
 
-    in_rg = False
-    for token in tokens:
-        if token and all(ch in PUNCTUATION for ch in token):
-            in_rg = False
+    Command boundaries come from `_shellscan`, which is what keeps a LATER
+    command's flags from being blamed on rg — the false positive this gate
+    shipped with (`… | rg …; jj file list -r main`, where the `-r` is jj's).
+    """
+    for word, args in invocations(command):
+        if word != "rg":
             continue
-        if token in PREFIXES:
-            continue
-
-        if not in_rg:
-            in_rg = token == "rg" or token.endswith("/rg")
-            continue
-
-        # Inside an rg invocation. `--` ends flag parsing entirely.
-        if token == "--":
-            in_rg = False
-            continue
-        if token.startswith("--"):
-            continue
-
-        if len(token) > 1 and token[0] == "-" and token[1:].isalpha():
-            for flag in BAD:
-                if flag in token[1:]:
-                    return token, flag
-
+        for token in args:
+            if token == "--":
+                break            # `--` ends flag parsing; the rest are operands
+            if token.startswith("--"):
+                continue         # long forms are explicit: --replace=/--encoding=
+            if len(token) > 1 and token[0] == "-" and token[1:].isalpha():
+                for flag in BAD:
+                    if flag in token[1:]:
+                        return token, flag
     return None
 
 
