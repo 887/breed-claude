@@ -88,6 +88,12 @@ link_in "$SRC/tests/jj-no-update-stale.sh"     "$HOME/.claude/hooks/tests"
 
 command -v python3 >/dev/null 2>&1 || echo "WARNING: python3 not on PATH — every hook here needs it"
 
+# The status line is NOT a gate — it is installed here because it is the same
+# clone-and-symlink story and one installer beats two. See ../statusline/README.md.
+echo
+echo "status line:"
+link_in "$SRC/../statusline/statusline.py" "$HOME/.claude"
+
 # Pin `snapshot.auto-update-stale = false` at user scope.
 #
 # This is the half of the stale-workspace hazard NO hook can catch. The setting
@@ -135,6 +141,9 @@ ONE entry, not one per gate. Claude Code runs each registered hook as its own
 process on EVERY Bash call, so four registrations meant four python3 spawns:
 measured 68 ms per call, against 27 ms for the dispatcher. gate.py imports the
 same four gates in-process and pays interpreter startup once.
+
+And, for the status line (same file, separate key):
+  { "statusLine": { "type": "command", "command": "python3 ~/.claude/statusline.py", "padding": 0 } }
 
 Then verify:
   bash ~/.claude/hooks/tests/gate.sh          # the dispatcher

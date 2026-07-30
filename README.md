@@ -36,6 +36,11 @@ that would open an editor an agent has no terminal to answer, hanging the tool c
 with no output. `hooks/install.sh` symlinks them into `~/.claude/hooks/` and prints
 the `settings.json` snippet to merge.
 
+[`statusline/`](./statusline/) carries the Claude Code status line — `model | dir |
+jj change · bookmark | context used | burn rate | weekly quota`. Not a gate, but the
+same clone-and-symlink story, so `hooks/install.sh` installs it too and prints the
+`statusLine` block to merge.
+
 ## Trigger phrases
 
 ### Breed (spawn a new one)
