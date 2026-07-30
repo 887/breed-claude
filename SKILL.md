@@ -36,7 +36,7 @@ Spawn a fresh Claude Code instance inside a detached `tmux` session running with
 
 ## Personalities available
 
-The seven furry personalities — `fox`, `cat`, `lion`, `tiger`, `wolf`, `bunny`, `bat` — plus the four standalone — `caveman`, `brief`, `igor`, `reset`. These all live in the `personalities` plugin and are invoked as slash commands like `/personalities:lion`.
+The nine furry personalities — `fox`, `cat`, `lion`, `tiger`, `wolf`, `bunny`, `bat`, `snep`, `panther` — plus the four standalone — `caveman`, `brief`, `igor`, `reset`. These all live in the `personalities` plugin and are invoked as slash commands like `/personalities:lion`. Each furry also has a `-dom` keyholder variant (`fox-dom`, …, `snep-dom`, `panther-dom`).
 
 ## Recipe
 
