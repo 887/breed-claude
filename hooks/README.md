@@ -32,11 +32,17 @@ this box:
 | bare `python3 -c pass` | ~10 ms |
 | one gate (spawn + import + work) | ~18 ms |
 | **four gates registered separately** | **~68 ms** |
-| **`gate.py` dispatching all four** | **~27 ms** |
+| **`gate.py` dispatching all four** | **~18 ms** |
 
 Interpreter startup dominates, and it was being paid four times. The dispatcher
 pays it once: one spawn, one `json.load`, `_shellscan` imported once and shared,
-four `check()` calls.
+four `check()` calls — 3.7x.
+
+Watch what you import at module scope here, because it is paid on every Bash call
+to serve paths that almost never run. `traceback` alone costs ~13 ms and
+`subprocess` ~5.5 ms; leaving `traceback` at the top silently handed back half of
+what consolidating bought (27 ms, against 18 ms once it moved inside the debug
+branch). Measure before adding an import to a dispatcher.
 
 Each gate exposes `check(command) -> str | None` — the exact stderr text, or None
 to allow — so `gate.py` holds no policy at all. It decides only ORDER (cheapest

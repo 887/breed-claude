@@ -7,13 +7,14 @@ Claude Code runs each registered hook as its own process, sequentially, on every
 single Bash tool call. With the four gates registered separately that was four
 `python3` spawns per call — measured on this box:
 
-    bare `python3 -c pass`                      ~10 ms
+    bare `python3 -c pass`                      ~9.5 ms
     one gate (spawn + import _shellscan + work) ~18 ms
-    the four-gate chain                         ~74 ms per Bash call
+    the four-gate chain                         ~68 ms per Bash call
+    THIS dispatcher                             ~18 ms per Bash call
 
 Interpreter startup dominates, and it was being paid four times to answer four
 questions about the same string. This dispatcher pays it once: one spawn, one
-`json.load`, `_shellscan` imported once and shared, four `check()` calls.
+`json.load`, `_shellscan` imported once and shared, four `check()` calls. 3.7x.
 
 Registration becomes one line, which is also the point — the fewer hook entries,
 the less there is to get out of sync between machines.
@@ -54,8 +55,13 @@ import importlib.util
 import json
 import os
 import sys
-import traceback
 from pathlib import Path
+
+# `traceback` is imported LAZILY, inside the only path that uses it. Measured on
+# this box: importing it costs ~13 ms of the ~26 ms this file would otherwise pay
+# at startup — on EVERY Bash call, to serve a debug path that almost never runs.
+# Leaving it at module scope silently gave back half of what consolidating the
+# registrations bought.
 
 HERE = Path(__file__).resolve().parent
 
@@ -116,6 +122,7 @@ def main() -> int:
             message = module.check(command)
         except Exception as error:                      # noqa: BLE001
             if os.environ.get("CLAUDE_GATE_DEBUG") == "1":
+                import traceback
                 traceback.print_exc()
             sys.stderr.write(broken(name, error))
             return 2
