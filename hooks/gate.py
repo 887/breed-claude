@@ -107,16 +107,62 @@ def broken(name, error):
     )
 
 
-def main() -> int:
-    if os.environ.get(ESCAPE) == "1":
-        return 0
+def escaped(command):
+    """True if the escape is set in the environment OR prefixes this command.
 
+    The message this file prints says `CLAUDE_GATE_SKIP=1 <your command>`, and for a
+    long time that did NOT work: an inline assignment is part of the command STRING
+    the tool is about to run, so it never reaches THIS process's environment, which
+    was the only place we looked. The advertised escape was therefore unreachable
+    from a tool call — and unreachable at exactly the moment it is needed, since a
+    broken gate blocks every command including the one that would fix it. Measured:
+    the author of the consolidation locked himself out and had to edit the file
+    through a non-Bash tool to get back in.
+
+    Deliberately SELF-CONTAINED rather than reusing `_shellscan`: the escape must
+    survive a gate module that cannot be imported, so it may not depend on importing
+    anything that a gate also imports.
+
+    An assignment only escapes when it sits in COMMAND POSITION, exactly as a shell
+    scopes it. `echo "CLAUDE_GATE_SKIP=1"` lexes to the same token but is an argument
+    to `echo`, so documenting the escape in prose cannot disable the gate.
+    """
+    if os.environ.get(ESCAPE) == "1":
+        return True
+    if not command or ESCAPE not in command:
+        return False
+
+    import shlex
+
+    target = f"{ESCAPE}=1"
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except ValueError:
+        return False
+
+    at_start = True
+    for token in tokens:
+        if token and all(ch in ";|&<>()" for ch in token):
+            at_start = True
+            continue
+        if at_start and token == target:
+            return True
+        # Assignments may stack (`A=1 B=2 cmd`); anything else opens the command.
+        at_start = at_start and "=" in token and not token.startswith("=")
+    return False
+
+
+def main() -> int:
     try:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
         return 0
 
     command = payload.get("tool_input", {}).get("command", "")
+    if escaped(command):
+        return 0
     if not command:
         return 0
 

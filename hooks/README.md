@@ -57,8 +57,24 @@ testable and debuggable (`echo '{…}' | python3 jj-no-interactive.py`).
 is blocked and the message names the gate, the file, and its suite. Consolidating
 four registrations into one otherwise creates a new failure mode: a single import
 error silently disabling every gate while still exiting 0, indistinguishable from
-"all clear". Recoverable on purpose — `CLAUDE_GATE_SKIP=1` bypasses the dispatcher
-entirely, so a syntax error cannot lock you out of your own shell.
+"all clear". Recoverable on purpose — `CLAUDE_GATE_SKIP=1 <your command>` bypasses the
+dispatcher entirely, so a broken gate cannot lock you out of your own shell.
+
+**That escape was itself broken, and the way it stayed broken is worth keeping.**
+The dispatcher read only `os.environ`, but the form every message advertises is
+an INLINE assignment — part of the command string the tool is about to run, so
+it never reaches the hook process at all. The escape was therefore unreachable
+from a tool call, and unreachable precisely when needed: a broken gate refuses
+every command, including the one that would repair it. Measured the hard way —
+deleting a function while a dispatcher still named it locked a session out of
+Bash entirely, and the documented bypass did nothing. The suite had a green
+escape-hatch case the whole time, because it set the variable in the *hook
+process's* environment: a shape no caller can produce. A test that exercises a
+form the real caller cannot emit is how an unreachable escape stays green.
+
+The check is now self-contained (it must survive a gate that will not import)
+and honours the assignment only in COMMAND POSITION, so documenting the escape
+in prose or an `echo` cannot switch every gate off.
 
 `_shellscan.py` is a shared helper the others import, not a hook. It is not symlinked
 and does not need to be: each hook resolves its own symlink back into this repo,

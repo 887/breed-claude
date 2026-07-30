@@ -114,6 +114,24 @@ cp "$HOOKS"/*.py "$SANDBOX/"
 printf 'def check(command):\n    raise RuntimeError("boom")\n' > "$SANDBOX/rg-flag-gate.py"
 run 2 "a gate raising at call time"    'ls -la' "$SANDBOX/gate.py"
 
+echo "== the ADVERTISED escape must actually work — including on a broken gate =="
+# The broken-gate message tells you to re-run with `CLAUDE_GATE_SKIP=1 <command>`.
+# That is an INLINE assignment: it is part of the command string the tool is about to
+# run, so it never reaches the hook process's environment — which was the only place
+# the dispatcher looked. The escape was unreachable from a tool call, and unreachable
+# at precisely the moment it is needed, because a broken gate blocks every command
+# including the one that would fix it. Measured the hard way: the author of the
+# consolidation locked himself out and had to edit the file through a non-Bash tool.
+run 0 "inline escape past a broken gate"   'CLAUDE_GATE_SKIP=1 ls -la' "$SANDBOX/gate.py"
+run 0 "inline escape, real gates, blocked cmd" 'CLAUDE_GATE_SKIP=1 git commit'
+run 0 "escape after an operator"           'cd /tmp; CLAUDE_GATE_SKIP=1 git commit'
+run 0 "stacked assignments"                'CLAUDE_GATE_SKIP=1 FOO=2 git commit'
+# ...and it must NOT be triggerable by merely NAMING it, or documenting the escape
+# in a commit message would silently disable every gate.
+run 2 "merely quoted in an echo"           'echo "CLAUDE_GATE_SKIP=1" && git commit'
+run 2 "named inside a commit message"      'jj describe -m "use CLAUDE_GATE_SKIP=1 to bypass" && git commit'
+run 2 "as an argument to rg"               'rg -n CLAUDE_GATE_SKIP=1 docs/ && git commit'
+
 echo
 printf 'passed=%d failed=%d\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
