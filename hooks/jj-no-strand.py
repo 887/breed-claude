@@ -31,6 +31,12 @@ reflex — after which the override was in my fingers for the case that mattered
 an empty commit reached `main` anyway. A gate that cries wolf on the safe shape is
 how the real one gets through.
 
+CHECK C — a push that will do NOTHING, because the bookmark already matches the
+remote. jj says `already matches` and exits 0, which reads exactly like success. The
+usual cause is a bookmark move refused moments earlier: jj declines a backwards or
+sideways move without `--allow-backwards`, and that error is easy to lose in a script
+that redirects stderr. Measured: four branches reported as pushed when none had moved.
+
 CHECK B — pushing an EMPTY commit. This is the damage itself rather than one route
 to it, so it catches the trap no matter which sequence produced it, including the
 one where check A was correctly silent. An empty non-merge commit at a bookmark you
@@ -45,7 +51,7 @@ Never blocked: `jj new` / `jj new @` (child of `@` strands nothing), an empty `@
 `jj new` while `@` is described or bookmarked, and any push of a non-empty commit.
 
 Overrides, each scoped to its own check so disabling one never disables the other:
-`JJ_ALLOW_STRANDING=1`, `JJ_ALLOW_EMPTY_PUSH=1`.
+`JJ_ALLOW_STRANDING=1`, `JJ_ALLOW_EMPTY_PUSH=1`, `JJ_ALLOW_NOOP_PUSH=1`.
 
 This is a fact about **jj**, not a project convention: `jj new` re-parents rather
 than moves, and a commit with no diff carries no work in any repository. It takes no
@@ -71,6 +77,7 @@ from _shellscan import invocations_env, overrides  # noqa: E402
 
 STRAND_OVERRIDE = "JJ_ALLOW_STRANDING"
 EMPTY_OVERRIDE = "JJ_ALLOW_EMPTY_PUSH"
+NOOP_OVERRIDE = "JJ_ALLOW_NOOP_PUSH"
 
 # jj global flags that CONSUME the next token, so it is not the subcommand.
 VALUE_FLAGS = {"-R", "--repository", "--at-op", "--at-operation", "--config",
@@ -253,6 +260,47 @@ def check_empty_push(cwd, args):
     return None
 
 
+def check_noop_push(cwd, args):
+    """A push that will do NOTHING, because local already equals the remote.
+
+    jj reports this as `Bookmark X@origin already matches X` and exits 0 — so it
+    reads exactly like a successful push. That is the failure mode: you believe you
+    published something and you did not.
+
+    The usual cause is a bookmark move that was REFUSED just before. jj declines to
+    move a bookmark backwards or sideways without `--allow-backwards`, and if that
+    error was swallowed (a script with `>/dev/null 2>&1`, or an eye that skipped it),
+    the bookmark still points where it did, so the push has nothing to send. Measured:
+    four branches were reported as pushed when not one of them had moved, and the
+    "already matches" line was read as confirmation.
+
+    Blocking a genuine no-op costs a prefix; missing one costs work you think is
+    published. The message names the likely cause rather than only the symptom.
+    """
+    names = pushed_bookmarks(args)
+    if not names:
+        return None
+    for name in names:
+        local = jj_field(cwd, name, "commit_id")
+        remote = jj_field(cwd, f"{name}@origin", "commit_id")
+        if not local or not remote or local != remote:
+            continue
+        return (
+            f"JJ NO-OP PUSH BLOCKED: `{name}` already matches `{name}@origin` — this "
+            "push sends NOTHING.\n\n"
+            f"  both at: {local[:12]}\n\n"
+            "  jj prints `already matches` and exits 0, so a no-op push reads exactly\n"
+            "  like a successful one. If you meant to publish new work, the bookmark\n"
+            "  move before this probably FAILED: jj refuses to move a bookmark\n"
+            "  backwards or sideways without `--allow-backwards`, and that error is\n"
+            "  easy to lose in a script that redirects stderr.\n\n"
+            "  Check where it actually points:\n"
+            f"      jj bookmark list {name}\n"
+            f"      jj bookmark set {name} -r <your-change> --allow-backwards\n"
+            f"  If a no-op push is genuinely what you want: {NOOP_OVERRIDE}=1 <command>\n")
+    return None
+
+
 def check(command):
     """The whole decision: the message to emit, or None to allow."""
     if not command or "jj" not in command:
@@ -279,6 +327,15 @@ def check(command):
             if cwd is None:
                 return None
             message = check_empty_push(cwd, rest_after(args, 2))
+            if message:
+                return message
+
+        if words[:2] == ["git", "push"] and not overrides(env, NOOP_OVERRIDE):
+            if cwd is None:
+                cwd = target_directory(command)
+            if cwd is None:
+                return None
+            message = check_noop_push(cwd, rest_after(args, 2))
             if message:
                 return message
     return None

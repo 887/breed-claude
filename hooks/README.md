@@ -124,6 +124,7 @@ jj git push              # an EMPTY commit lands, with a message that lies
 | --- | --- | --- |
 | A — stranding | `jj new <target>` while `@` holds uncommitted work that is **neither described nor bookmarked** | `JJ_ALLOW_STRANDING=1` |
 | B — empty push | a bookmark you are pushing points at an **empty non-merge commit** | `JJ_ALLOW_EMPTY_PUSH=1` |
+| C — no-op push | the bookmark **already matches** its remote, so the push sends nothing | `JJ_ALLOW_NOOP_PUSH=1` |
 
 Check A is deliberately **narrower** than its predecessor, which fired on any
 non-empty `@`. A described or bookmarked `@` is a *named* change: leaving it behind
@@ -138,7 +139,14 @@ rather than one route to it, so it fires however you got there — including the
 sequence where check A was correctly silent. An empty non-merge commit at a bookmark
 is a message with no bytes behind it. Empty *merge* commits are normal and pass.
 
-Both checks shell out to `jj`, but only for `jj new` and `jj git push`, so every
+Check C is the third face of the same failure: a push that reads as success and did
+nothing. jj prints `Bookmark X@origin already matches X` and exits 0. The usual cause
+is a bookmark move refused moments earlier — jj declines a backwards or sideways move
+without `--allow-backwards` — and that error is easy to lose in a script that
+redirects stderr. Measured: four branches were reported as pushed when not one of them
+had moved, and the `already matches` line was read as confirmation.
+
+All three checks shell out to `jj`, but only for `jj new` and `jj git push`, so every
 other Bash call still returns before paying for a subprocess (and `subprocess` itself
 is imported lazily inside the query). Queries pass `--ignore-working-copy` except the
 one question that is genuinely *about* the working copy — otherwise inspecting the
@@ -417,7 +425,7 @@ bash tests/rg-flag-gate.sh         # 26 cases
 bash tests/jj-no-interactive.sh    # 50 cases
 bash tests/git-no-interactive.sh   # 119 cases
 bash tests/jj-no-update-stale.sh   # 38 cases
-bash tests/jj-no-strand.sh         # 27 cases
+bash tests/jj-no-strand.sh         # 31 cases
 ```
 
 Each harness invokes the **real** hook with synthetic `PreToolUse` payloads — no

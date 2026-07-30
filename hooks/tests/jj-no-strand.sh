@@ -22,7 +22,10 @@ HOOK="${JJ_STRAND_HOOK:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/jj-no-s
 pass=0; fail=0
 TMPROOT="$(mktemp -d)"
 trap 'rm -rf "$TMPROOT"' EXIT
-export JJ_CONFIG=/dev/null
+# JJ_USER/JJ_EMAIL are REQUIRED alongside an empty config: without an author jj
+# refuses to push at all ("no author and/or committer set"), which silently cost
+# this suite its entire check-C fixture the first time.
+export JJ_CONFIG=/dev/null JJ_USER=t JJ_EMAIL=t@e
 
 # run <expected-exit> <repo> <label> <command>
 run() {
@@ -78,6 +81,23 @@ FULL_BM="$(new_repo full-bookmark)"          # bookmark on a commit with real ch
 echo real > "$FULL_BM/real.txt"
 ( cd "$FULL_BM" && jj describe -m "feat: real work" >/dev/null 2>&1 \
   && jj bookmark set main -r @ >/dev/null 2>&1 )
+
+# A repo whose bookmark ALREADY matches its remote: the push would send nothing.
+# Built with a real `jj git push` to a local bare remote, so `@origin` is genuine
+# rather than simulated.
+SYNCED="$TMPROOT/synced"
+REMOTE="$TMPROOT/remote.git"
+git init -q --bare "$REMOTE" 2>/dev/null
+mkdir -p "$SYNCED"
+( cd "$SYNCED"
+  jj git init . >/dev/null 2>&1
+  echo real > real.txt
+  jj describe -m "feat: real work" >/dev/null 2>&1
+  jj bookmark set main -r @ >/dev/null 2>&1
+  jj git remote add origin "$REMOTE" >/dev/null 2>&1
+  # Modern jj creates AND tracks a new remote bookmark from a plain push;
+  # `--allow-new` does not exist and makes the push fail outright.
+  jj git push --bookmark main >/dev/null 2>&1 )
 
 echo "== check A: re-parenting away from UNNAMED work must BLOCK =="
 run 2 "$DIRTY_BARE" "positional target"          'jj new main'
@@ -136,6 +156,27 @@ echo "== unresolvable target directory: stay silent, never guess =="
 # `cd \"\$T/ws\"` reaches the hook UNEXPANDED — the variable is set inside this very
 # command. Querying the wrong repo would produce a confident wrong answer.
 run 0 "$DIRTY_BARE" "cd through an unexpanded var" 'cd "$T/ws" && jj new main'
+
+echo
+echo "== check C: a push that sends NOTHING must BLOCK =="
+# jj reports `already matches` and exits 0, so a no-op push reads exactly like a
+# successful one. Measured: four branches were reported as pushed when not one had
+# moved, because the `jj bookmark set` before them had been refused (jj declines a
+# backwards/sideways move without --allow-backwards) and its error was redirected away.
+# A fixture that cannot be built must FAIL, never skip. A skipped assertion reads as
+# a passing suite while testing nothing — the same silent-success shape this very
+# check exists to catch. The first version of this block skipped, and the reason
+# (no author configured, so the push was refused) went unnoticed.
+if [ -z "$(cd "$SYNCED" && jj log --no-graph -r 'main@origin' -T commit_id 2>/dev/null)" ]; then
+  fail=$((fail + 1))
+  printf '  FAIL  could not build the synced fixture — check C was never exercised\n'
+else
+  run 2 "$SYNCED" "local already matches remote"  'jj git push --bookmark main'
+  run 0 "$SYNCED" "override disengages C"         'JJ_ALLOW_NOOP_PUSH=1 jj git push --bookmark main'
+  # Each check owns its override: the empty-push one must NOT buy you a no-op push.
+  run 2 "$SYNCED" "a DIFFERENT override does not" 'JJ_ALLOW_EMPTY_PUSH=1 jj git push --bookmark main'
+fi
+run 0 "$FULL_BM" "no remote at all: silent"      'jj git push --bookmark main'
 
 echo
 printf 'passed=%d failed=%d\n' "$pass" "$fail"
