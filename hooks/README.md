@@ -19,6 +19,7 @@ files out.
 | `jj-no-interactive.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
 | `git-no-interactive.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
 | `jj-no-update-stale.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
+| `jj-no-strand.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` + a jj repo |
 
 ### `gate.py` — one registration, four gates, one process
 
@@ -85,6 +86,57 @@ at once.** Two were found by measurement, not review, and both were silent:
 Both fixes were confirmed by running the new cases against the pre-fix code: 14
 failures, all green after. A test that never failed against the broken version is
 not evidence.
+
+### `jj-no-strand.py` — orphaned work, and the empty commit that lands instead
+
+`jj new <target>` does **not** move your working-copy edits. jj snapshots them into
+the *current* change and makes a new, EMPTY commit off `<target>` your working copy.
+Nothing errors — the files just leave your working directory. The damage lands one
+step later:
+
+```
+<edits in @>
+jj new main              # edits stay behind; @ is now empty
+jj describe -m "..."     # a message describing work this commit does not carry
+jj bookmark set main -r @
+jj git push              # an EMPTY commit lands, with a message that lies
+```
+
+**Two checks, because one cannot be made both safe and quiet.**
+
+| | fires when | override |
+| --- | --- | --- |
+| A — stranding | `jj new <target>` while `@` holds uncommitted work that is **neither described nor bookmarked** | `JJ_ALLOW_STRANDING=1` |
+| B — empty push | a bookmark you are pushing points at an **empty non-merge commit** | `JJ_ALLOW_EMPTY_PUSH=1` |
+
+Check A is deliberately **narrower** than its predecessor, which fired on any
+non-empty `@`. A described or bookmarked `@` is a *named* change: leaving it behind
+is how you start a sibling, and you can find it again. Blocking that produced steady
+false positives, which trained the operator to prefix the override by reflex — so
+the override was already in hand for the case that mattered, and an empty commit
+reached `main` anyway. **Over-blocking is not a milder failure than under-blocking;
+it is the mechanism that causes it.**
+
+Check B is the reason this gate is worth having at all: it guards the **damage**
+rather than one route to it, so it fires however you got there — including the
+sequence where check A was correctly silent. An empty non-merge commit at a bookmark
+is a message with no bytes behind it. Empty *merge* commits are normal and pass.
+
+Both checks shell out to `jj`, but only for `jj new` and `jj git push`, so every
+other Bash call still returns before paying for a subprocess (and `subprocess` itself
+is imported lazily inside the query). Queries pass `--ignore-working-copy` except the
+one question that is genuinely *about* the working copy — otherwise inspecting the
+repo would snapshot it, mutating state as a side effect of a hook that runs on
+commands which have not happened yet.
+
+A `cd` through an unexpanded variable (`cd "$T/ws" && jj new main`) makes the target
+directory unknowable — the variable is set inside the very command that has not run.
+The gate stays **silent** rather than querying whichever repo it happens to be
+standing in: a confident answer about the wrong repository is worse than none.
+
+Shareable on the same test as its siblings: `jj new` re-parents rather than moves,
+and a commit with no diff carries no work — true in every repository. It takes no
+position on squashing, merge method, or commit shape.
 
 ### `rg-flag-gate.py` — ripgrep short flags that mean something else
 
@@ -348,7 +400,8 @@ bash tests/gate.sh                 # 25 cases — dispatch, not rules
 bash tests/rg-flag-gate.sh         # 26 cases
 bash tests/jj-no-interactive.sh    # 50 cases
 bash tests/git-no-interactive.sh   # 119 cases
-bash tests/jj-no-update-stale.sh   # 33 cases
+bash tests/jj-no-update-stale.sh   # 38 cases
+bash tests/jj-no-strand.sh         # 27 cases
 ```
 
 Each harness invokes the **real** hook with synthetic `PreToolUse` payloads — no

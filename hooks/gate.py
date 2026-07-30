@@ -67,10 +67,14 @@ HERE = Path(__file__).resolve().parent
 
 # Cheapest / most specific first — see "Order" above.
 GATES = (
+    # Cheapest first: the text-only gates decide without touching the repo.
     "rg-flag-gate",
     "jj-no-update-stale",
     "jj-no-interactive",
     "git-no-interactive",
+    # Last: this one SHELLS OUT to jj, but only for `jj new` / `jj git push`, so
+    # every other Bash call still exits above without paying for a subprocess.
+    "jj-no-strand",
 )
 
 ESCAPE = "CLAUDE_GATE_SKIP"
