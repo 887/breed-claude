@@ -260,7 +260,29 @@ def check_empty_push(cwd, args):
     return None
 
 
-def check_noop_push(cwd, args):
+def moves_bookmark_first(command, names):
+    """True if THIS command also moves one of those bookmarks before pushing.
+
+    A hook runs BEFORE any of the command has executed, so for a compound command
+    (`jj bookmark set main -r @ && jj git push --bookmark main`) the state it reads is
+    the state from BEFORE the move — and the push looks like a no-op that is about to
+    become a real one. Measured: this gate blocked its own author's `describe && set &&
+    push` chain, and blocked the whole chain, so nothing ran at all.
+
+    A false positive on a chain like that is not cosmetic. The documented way past is
+    an override that switches the check off, so crying wolf here trains the exact
+    reflex that let an empty commit reach main in the first place.
+    """
+    for word, args, _ in invocations_env(command):
+        if word != "jj":
+            continue
+        words = words_of(args)
+        if words[:2] == ["bookmark", "set"] and set(words[2:]) & set(names):
+            return True
+    return False
+
+
+def check_noop_push(cwd, args, command=""):
     """A push that will do NOTHING, because local already equals the remote.
 
     jj reports this as `Bookmark X@origin already matches X` and exits 0 — so it
@@ -280,6 +302,8 @@ def check_noop_push(cwd, args):
     names = pushed_bookmarks(args)
     if not names:
         return None
+    if moves_bookmark_first(command, names):
+        return None                      # the same command moves it first
     for name in names:
         local = jj_field(cwd, name, "commit_id")
         remote = jj_field(cwd, f"{name}@origin", "commit_id")
@@ -335,7 +359,7 @@ def check(command):
                 cwd = target_directory(command)
             if cwd is None:
                 return None
-            message = check_noop_push(cwd, rest_after(args, 2))
+            message = check_noop_push(cwd, rest_after(args, 2), command)
             if message:
                 return message
     return None

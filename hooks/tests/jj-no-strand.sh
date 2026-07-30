@@ -175,6 +175,15 @@ else
   run 0 "$SYNCED" "override disengages C"         'JJ_ALLOW_NOOP_PUSH=1 jj git push --bookmark main'
   # Each check owns its override: the empty-push one must NOT buy you a no-op push.
   run 2 "$SYNCED" "a DIFFERENT override does not" 'JJ_ALLOW_EMPTY_PUSH=1 jj git push --bookmark main'
+  # A hook runs BEFORE the command does, so for a chain that MOVES the bookmark and
+  # then pushes it, the state read here is the state from before the move. Measured:
+  # this gate blocked its own author's `describe && bookmark set && push`, and blocked
+  # the whole chain, so not one step ran. Crying wolf on a correct chain trains the
+  # override reflex that let an empty commit reach main to begin with.
+  run 0 "$SYNCED" "chain moves the bookmark first" 'jj bookmark set main -r @ && jj git push --bookmark main'
+  run 0 "$SYNCED" "describe, set, then push"       'jj describe -m x && jj bookmark set main -r @ --allow-backwards && jj git push --bookmark main'
+  # ...but a chain that moves a DIFFERENT bookmark must still be caught.
+  run 2 "$SYNCED" "chain moves another bookmark"   'jj bookmark set other -r @ && jj git push --bookmark main'
 fi
 run 0 "$FULL_BM" "no remote at all: silent"      'jj git push --bookmark main'
 

@@ -146,6 +146,12 @@ without `--allow-backwards` — and that error is easy to lose in a script that
 redirects stderr. Measured: four branches were reported as pushed when not one of them
 had moved, and the `already matches` line was read as confirmation.
 
+Check C skips a command that MOVES the bookmark before pushing it
+(`jj bookmark set main -r @ && jj git push --bookmark main`). A hook runs before the
+command does, so the state it reads is the state from *before* the move — and an
+about-to-be-real push looks like a no-op. This gate blocked its own author's
+`describe && set && push`, and blocked the whole chain, so not one step ran.
+
 All three checks shell out to `jj`, but only for `jj new` and `jj git push`, so every
 other Bash call still returns before paying for a subprocess (and `subprocess` itself
 is imported lazily inside the query). Queries pass `--ignore-working-copy` except the
@@ -425,7 +431,7 @@ bash tests/rg-flag-gate.sh         # 26 cases
 bash tests/jj-no-interactive.sh    # 50 cases
 bash tests/git-no-interactive.sh   # 119 cases
 bash tests/jj-no-update-stale.sh   # 38 cases
-bash tests/jj-no-strand.sh         # 31 cases
+bash tests/jj-no-strand.sh         # 34 cases
 ```
 
 Each harness invokes the **real** hook with synthetic `PreToolUse` payloads — no
