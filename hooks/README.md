@@ -14,10 +14,44 @@ files out.
 
 | Hook | Scope | Installs to | Needs |
 | --- | --- | --- | --- |
-| `rg-flag-gate.py` | user (all projects) | `~/.claude/hooks/` | `python3` |
-| `jj-no-interactive.py` | user (all projects) | `~/.claude/hooks/` | `python3` |
-| `git-no-interactive.py` | user (all projects) | `~/.claude/hooks/` | `python3` |
-| `jj-no-update-stale.py` | user (all projects) | `~/.claude/hooks/` | `python3` |
+| `gate.py` | **the only registration** | `~/.claude/hooks/` | `python3` |
+| `rg-flag-gate.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
+| `jj-no-interactive.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
+| `git-no-interactive.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
+| `jj-no-update-stale.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
+
+### `gate.py` — one registration, four gates, one process
+
+**Register only this.** Claude Code runs each registered hook as its own process,
+sequentially, on *every* Bash tool call. Four separate registrations therefore meant
+four `python3` spawns to answer four questions about the same string — measured on
+this box:
+
+| | per Bash call |
+| --- | --- |
+| bare `python3 -c pass` | ~10 ms |
+| one gate (spawn + import + work) | ~18 ms |
+| **four gates registered separately** | **~68 ms** |
+| **`gate.py` dispatching all four** | **~27 ms** |
+
+Interpreter startup dominates, and it was being paid four times. The dispatcher
+pays it once: one spawn, one `json.load`, `_shellscan` imported once and shared,
+four `check()` calls.
+
+Each gate exposes `check(command) -> str | None` — the exact stderr text, or None
+to allow — so `gate.py` holds no policy at all. It decides only ORDER (cheapest
+first; the first gate to object wins) and what happens when a gate is broken.
+
+The gates keep their `main()` and stay directly runnable, which is not vestigial:
+each one's suite invokes the real file over stdin, so they remain independently
+testable and debuggable (`echo '{…}' | python3 jj-no-interactive.py`).
+
+**A broken gate fails LOUD.** If a gate cannot be imported or raises, the command
+is blocked and the message names the gate, the file, and its suite. Consolidating
+four registrations into one otherwise creates a new failure mode: a single import
+error silently disabling every gate while still exiting 0, indistinguishable from
+"all clear". Recoverable on purpose — `CLAUDE_GATE_SKIP=1` bypasses the dispatcher
+entirely, so a syntax error cannot lock you out of your own shell.
 
 `_shellscan.py` is a shared helper the others import, not a hook. It is not symlinked
 and does not need to be: each hook resolves its own symlink back into this repo,
@@ -304,6 +338,7 @@ session. `/hooks` is read-only; there is no in-session approve step.
 ## Tests
 
 ```sh
+bash tests/gate.sh                 # 25 cases — dispatch, not rules
 bash tests/rg-flag-gate.sh         # 26 cases
 bash tests/jj-no-interactive.sh    # 50 cases
 bash tests/git-no-interactive.sh   # 119 cases

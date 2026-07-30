@@ -74,23 +74,23 @@ def offending_flag(command: str) -> "tuple[str, str] | None":
     return None
 
 
-def main() -> int:
-    try:
-        payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
-        return 0
+def check(command):
+    """The whole decision: the message to emit, or None to allow.
 
-    command = payload.get("tool_input", {}).get("command", "")
+    Kept separate from `main` so `gate.py` can call it in-process. Four separate
+    hook registrations meant four python3 spawns per Bash call (~74 ms measured);
+    one dispatcher importing four `check`s costs one.
+    """
     if not command or "rg" not in command:
-        return 0
+        return None
 
     found = offending_flag(command)
     if found is None:
-        return 0
+        return None
 
     token, flag = found
     headline, why, instead = BAD[flag]
-    sys.stderr.write(
+    return (
         f"RG FLAG GATE BLOCKED: `{token}` in `rg`\n\n"
         f"  {headline}\n\n"
         f"  {why}\n\n"
@@ -100,6 +100,18 @@ def main() -> int:
         "  this gate will let it through.\n"
         "  Rule: ~/.claude/CLAUDE.md, the ripgrep flag-collision section.\n"
     )
+
+
+def main() -> int:
+    try:
+        payload = json.load(sys.stdin)
+    except (json.JSONDecodeError, ValueError):
+        return 0
+
+    message = check(payload.get("tool_input", {}).get("command", ""))
+    if message is None:
+        return 0
+    sys.stderr.write(message)
     return 2
 
 

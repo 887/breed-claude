@@ -120,21 +120,20 @@ def blocked_segment(command):
     return False
 
 
-def main() -> int:
-    try:
-        payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
-        return 0
+def check(command):
+    """The whole decision: the message to emit, or None to allow.
 
-    command = payload.get("tool_input", {}).get("command", "")
+    Separate from `main` so `gate.py` can call it in-process — one python3 spawn
+    per Bash call instead of one per gate.
+    """
     if not command or "update-stale" not in command:
-        return 0
+        return None
     if os.environ.get(OVERRIDE) == "1":
-        return 0
+        return None
     if not blocked_segment(command):
-        return 0
+        return None
 
-    sys.stderr.write(
+    return (
         "JJ UPDATE-STALE BLOCKED: `jj workspace update-stale` overwrites the "
         "workspace's\n"
         "  on-disk files with the new commit, and jj does NOT snapshot them first.\n"
@@ -155,6 +154,18 @@ def main() -> int:
         "  This is not a forbidden command — it is the real recovery for a genuinely\n"
         "  stale workspace. What it must not be is a reflex for getting past an\n"
         "  error, because the work it discards has no op-log entry to recover from.\n")
+
+
+def main() -> int:
+    try:
+        payload = json.load(sys.stdin)
+    except (json.JSONDecodeError, ValueError):
+        return 0
+
+    message = check(payload.get("tool_input", {}).get("command", ""))
+    if message is None:
+        return 0
+    sys.stderr.write(message)
     return 2
 
 

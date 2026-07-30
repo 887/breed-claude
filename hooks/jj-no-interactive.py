@@ -191,26 +191,37 @@ def verdict(command):
     return None
 
 
+def check(command):
+    """The whole decision: the message to emit, or None to allow.
+
+    Separate from `main` so `gate.py` can call it in-process — one python3 spawn
+    per Bash call instead of one per gate.
+    """
+    if not command or "jj" not in command:
+        return None
+
+    reason = verdict(command)
+    if reason is None:
+        return None
+
+    return (
+        f"JJ INTERACTIVE BLOCKED: {reason}\n\n"
+        "  An agent has no terminal, so this would not error — it would HANG until\n"
+        "  the tool call times out, with no output to say why.\n"
+        f"  If you are a human at a real terminal, re-run prefixed with {OVERRIDE}=1\n"
+    )
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
         return 0
 
-    command = payload.get("tool_input", {}).get("command", "")
-    if not command or "jj" not in command:
+    message = check(payload.get("tool_input", {}).get("command", ""))
+    if message is None:
         return 0
-
-    reason = verdict(command)
-    if reason is None:
-        return 0
-
-    sys.stderr.write(
-        f"JJ INTERACTIVE BLOCKED: {reason}\n\n"
-        "  An agent has no terminal, so this would not error — it would HANG until\n"
-        "  the tool call times out, with no output to say why.\n"
-        f"  If you are a human at a real terminal, re-run prefixed with {OVERRIDE}=1\n"
-    )
+    sys.stderr.write(message)
     return 2
 
 

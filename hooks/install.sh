@@ -75,10 +75,12 @@ link_in() {         # link_in <src-file> <dest-dir>
 # so the shared module is found beside the real file. That is also why these must
 # be symlinked rather than copied — a lone copied hook has no module to import.
 echo "user-scope hooks:"
+link_in "$SRC/gate.py"                      "$HOME/.claude/hooks"
 link_in "$SRC/rg-flag-gate.py"              "$HOME/.claude/hooks"
 link_in "$SRC/jj-no-interactive.py"         "$HOME/.claude/hooks"
 link_in "$SRC/git-no-interactive.py"        "$HOME/.claude/hooks"
 link_in "$SRC/jj-no-update-stale.py"           "$HOME/.claude/hooks"
+link_in "$SRC/tests/gate.sh"                "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/rg-flag-gate.sh"        "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/jj-no-interactive.sh"   "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/git-no-interactive.sh"  "$HOME/.claude/hooks/tests"
@@ -126,17 +128,20 @@ Now merge the registration by hand (this script will not touch settings.json).
 
 ~/.claude/settings.json:
   { "hooks": { "PreToolUse": [ { "matcher": "Bash", "hooks": [
-    { "type": "command", "command": "python3 $HOME/.claude/hooks/rg-flag-gate.py" },
-    { "type": "command", "command": "python3 $HOME/.claude/hooks/jj-no-interactive.py" },
-    { "type": "command", "command": "python3 $HOME/.claude/hooks/git-no-interactive.py" },
-    { "type": "command", "command": "python3 $HOME/.claude/hooks/jj-no-update-stale.py" }
+    { "type": "command", "command": "python3 $HOME/.claude/hooks/gate.py" }
   ] } ] } }
 
+ONE entry, not one per gate. Claude Code runs each registered hook as its own
+process on EVERY Bash call, so four registrations meant four python3 spawns:
+measured 68 ms per call, against 27 ms for the dispatcher. gate.py imports the
+same four gates in-process and pays interpreter startup once.
+
 Then verify:
+  bash ~/.claude/hooks/tests/gate.sh          # the dispatcher
   bash ~/.claude/hooks/tests/rg-flag-gate.sh
   bash ~/.claude/hooks/tests/jj-no-interactive.sh
   bash ~/.claude/hooks/tests/git-no-interactive.sh
   bash ~/.claude/hooks/tests/jj-no-update-stale.sh
-  /hooks     (in-session; all four should be listed. Hooks hot-reload — if one is
+  /hooks     (in-session; gate.py should be listed. Hooks hot-reload — if one is
              missing, that is real wiring breakage, not a stale session)
 SNIPPET
