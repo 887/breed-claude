@@ -71,8 +71,10 @@ link_in() {         # link_in <src-file> <dest-dir>
 echo "user-scope hooks:"
 link_in "$SRC/rg-flag-gate.py"              "$HOME/.claude/hooks"
 link_in "$SRC/jj-no-interactive.py"         "$HOME/.claude/hooks"
+link_in "$SRC/git-no-interactive.py"        "$HOME/.claude/hooks"
 link_in "$SRC/tests/rg-flag-gate.sh"        "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/jj-no-interactive.sh"   "$HOME/.claude/hooks/tests"
+link_in "$SRC/tests/git-no-interactive.sh"  "$HOME/.claude/hooks/tests"
 
 command -v python3 >/dev/null 2>&1 || echo "WARNING: python3 not on PATH — both hooks need it"
 
@@ -83,12 +85,14 @@ Now merge the registration by hand (this script will not touch settings.json).
 ~/.claude/settings.json:
   { "hooks": { "PreToolUse": [ { "matcher": "Bash", "hooks": [
     { "type": "command", "command": "python3 $HOME/.claude/hooks/rg-flag-gate.py" },
-    { "type": "command", "command": "python3 $HOME/.claude/hooks/jj-no-interactive.py" }
+    { "type": "command", "command": "python3 $HOME/.claude/hooks/jj-no-interactive.py" },
+    { "type": "command", "command": "python3 $HOME/.claude/hooks/git-no-interactive.py" }
   ] } ] } }
 
 Then verify:
   bash ~/.claude/hooks/tests/rg-flag-gate.sh
   bash ~/.claude/hooks/tests/jj-no-interactive.sh
+  bash ~/.claude/hooks/tests/git-no-interactive.sh
   /hooks     (in-session; both hooks should be listed. Hooks hot-reload — if one is
              missing, that is real wiring breakage, not a stale session)
 SNIPPET

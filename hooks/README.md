@@ -16,6 +16,7 @@ files out.
 | --- | --- | --- | --- |
 | `rg-flag-gate.py` | user (all projects) | `~/.claude/hooks/` | `python3` |
 | `jj-no-interactive.py` | user (all projects) | `~/.claude/hooks/` | `python3` |
+| `git-no-interactive.py` | user (all projects) | `~/.claude/hooks/` | `python3` |
 
 `_shellscan.py` is a shared helper both import, not a hook. It is not symlinked
 and does not need to be: each hook resolves its own symlink back into this repo,
@@ -71,6 +72,55 @@ This qualifies as shareable on the same test as the rg gate: it encodes a fact
 about **jj plus the absence of a tty**, true in every repository. Note what it
 deliberately does *not* do — it takes no position on squashing, merge method, or
 commit shape. Those are project decisions and belong to the project.
+
+### `git-no-interactive.py` — the same hazard, in git
+
+Git has the larger surface of the two, and the two failure shapes are worth
+keeping apart:
+
+- **Opens `$GIT_EDITOR` → hangs.** `git commit` with no message flag, `--amend`
+  without `--no-edit`, `git rebase -i`, `git tag -a` without `-m`, `git notes
+  add`/`edit`, `git branch --edit-description`, `git config --edit`, and every
+  `-e/--edit` form. No error, no output — the call sits there until it times out.
+- **Reads a TUI off stdin → exits 0 having done nothing.** `git add -p`/`-i`,
+  `git commit -p`, `-p` on `checkout`/`restore`/`reset`/`stash push`, `git clean
+  -i`, `git am -i`, `git mergetool`, `git difftool` without `--no-prompt`. These
+  don't hang: they hit EOF immediately and return success having staged, cleaned,
+  or applied *nothing*. That is the `rg -r` shape — succeeds while doing the wrong
+  thing — so they are blocked too.
+
+**Every rule was probed against real git, not recalled.** `GIT_EDITOR` set to a
+script that logs and then sleeps, stdin at `/dev/null`, under `timeout`, with a
+control case in each run that had to report a hang or the run was thrown away.
+That control earned its keep three times: one harness ran the *label* as the
+command, another had `git clean -fd` delete the probe editor out of the repo it
+was probing, and both produced a clean sheet of plausible "no editor" rows. A
+uniform negative is usually a broken measurement, not a finding.
+
+Four verdicts came out opposite to what the flag names suggest, and each is a
+regression case in the suite:
+
+| Looks blockable | Actually | Why |
+| --- | --- | --- |
+| `git commit --squash=<c>` | **blocks** | unlike `--fixup`, it does *not* supply a finished message — the editor still opens |
+| `git commit --fixup=<c>` | passes | builds the message itself |
+| `git commit -c <c>` | **blocks** | lowercase `-c` is `--reedit-message` |
+| `git commit -C <c>` | passes | uppercase `-C` is `--reuse-message`, no editor |
+| `git commit -i` | passes | for `commit`, `-i` is `--include` — *not* interactive (whereas `git add -i` is) |
+| `git merge`, `git revert` | passes | their editor is tty-conditional; with no terminal, git writes the default message |
+
+`git commit -am "msg"` also has to pass, which means short-flag **clusters** must
+be unbundled — a whole-token check misses the `m` in `-am` and blocks the single
+most common commit form. `--allow-empty-message`, by contrast, does *not* skip the
+editor, so it is not treated as a message flag.
+
+Override for a human at a real terminal: `GIT_GATE_ALLOW_INTERACTIVE=1`.
+
+Shareable on the same test as its siblings: it encodes a fact about **git plus the
+absence of a tty**. It takes no position on commit shape, squash-merges, rebase
+policy, or branch naming — `git rebase <upstream>`, `git merge --no-ff`, and
+`git commit --amend --no-edit` all pass, because whether you *should* run them is
+the project's call, not this hook's.
 
 ## What does NOT belong here
 
@@ -133,7 +183,8 @@ hooks to save a paste is a bad trade.
 ```json
 { "hooks": { "PreToolUse": [ { "matcher": "Bash", "hooks": [
   { "type": "command", "command": "python3 $HOME/.claude/hooks/rg-flag-gate.py" },
-  { "type": "command", "command": "python3 $HOME/.claude/hooks/jj-no-interactive.py" }
+  { "type": "command", "command": "python3 $HOME/.claude/hooks/jj-no-interactive.py" },
+  { "type": "command", "command": "python3 $HOME/.claude/hooks/git-no-interactive.py" }
 ] } ] } }
 ```
 
@@ -146,8 +197,9 @@ session. `/hooks` is read-only; there is no in-session approve step.
 ## Tests
 
 ```sh
-bash tests/rg-flag-gate.sh        # 26 cases
-bash tests/jj-no-interactive.sh   # 43 cases
+bash tests/rg-flag-gate.sh         # 26 cases
+bash tests/jj-no-interactive.sh    # 43 cases
+bash tests/git-no-interactive.sh   # 116 cases
 ```
 
 Each harness invokes the **real** hook with synthetic `PreToolUse` payloads — no
@@ -176,3 +228,18 @@ lexing with `punctuation_chars=True` so operators arrive as their own tokens.
 Regression case: `the recorded false positive`. Verified by running the suite
 against the pre-fix hook — 3 failures, all green after. A fix whose test never
 failed against the broken version is not evidence of anything.
+
+### When there is no broken version to test against
+
+The git suite passed 116/116 on its first run, which is not evidence either — the
+same sheet of greens is what a hook returning 0 unconditionally produces. So it was
+run against three deliberate mutants instead, and it has to kill all three:
+
+| Mutant | Expected | Observed |
+| --- | --- | --- |
+| `verdict()` returns `None` always (allow everything) | every block case fails | 54 failures |
+| scan raw `shlex.split` tokens instead of command positions | the mention/boundary cases fail | 54 failures |
+| `shorts()` ignores clusters longer than one letter | `git commit -am` false-positives | caught, plus `rebase -im` |
+
+Mutant 2 is the one that matters most: it fails *pass*-direction cases, so it
+proves the suite constrains over-blocking and not just under-blocking.

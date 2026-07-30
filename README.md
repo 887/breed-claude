@@ -28,6 +28,14 @@ ln -s "$PWD/santaing"    ~/.claude/skills/santaing
 # (breed-claude itself: the repo root is symlinked as ~/.claude/skills/breed-claude)
 ```
 
+Alongside them, [`hooks/`](./hooks/) carries the `PreToolUse(Bash)` gates — not a
+skill, but the same "runs on every machine you clone this to" idea. They block
+commands that *succeed while doing the wrong thing*: ripgrep short flags that mean
+something else (`-r` is `--replace`, not recursive), and `git`/`jj` invocations
+that would open an editor an agent has no terminal to answer, hanging the tool call
+with no output. `hooks/install.sh` symlinks them into `~/.claude/hooks/` and prints
+the `settings.json` snippet to merge.
+
 ## Trigger phrases
 
 ### Breed (spawn a new one)
