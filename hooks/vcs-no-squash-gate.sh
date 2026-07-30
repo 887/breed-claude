@@ -6,7 +6,7 @@
 # other):
 #
 #   A. NO SQUASH / NO REWRITE OF SHARED HISTORY (CLAUDE.md) — override
-#      FOUNDLINGS_ALLOW_HISTORY_REWRITE=1. Blocks:
+#      VCS_GATE_ALLOW_HISTORY_REWRITE=1. Blocks:
 #        1. `jj squash`                      — squashes changes together.
 #        2. squash-merge of a PR             — `gh pr merge --squash`/`-s` or a
 #                                              `merge_method=squash` API merge.
@@ -15,7 +15,7 @@
 #           `metaedit`) targeting a revision that CURRENTLY HAS a bookmark.
 #
 #   B. NO `jj new` STRANDING OF A DIRTY @ (CLAUDE.md / kg memory) — override
-#      FOUNDLINGS_ALLOW_JJ_NEW_STRANDING=1. `jj new <target>` (a positional
+#      VCS_GATE_ALLOW_JJ_NEW_STRANDING=1. `jj new <target>` (a positional
 #      target other than @, or -A/-B) starts a NEW empty commit off <target> and
 #      moves @ onto it; if the current @ had uncommitted edits they DON'T travel
 #      — they stay behind as a sibling and @ becomes an empty commit. Nothing
@@ -49,11 +49,11 @@ resolve_ws() {
 # ============================================================================
 # A. no-squash / no-rewrite-shared-history
 # ============================================================================
-if ! printf '%s' "$cmd" | grep -Eq 'FOUNDLINGS_ALLOW_HISTORY_REWRITE=1'; then
+if ! printf '%s' "$cmd" | grep -Eq 'VCS_GATE_ALLOW_HISTORY_REWRITE=1'; then
   block_a() {
     echo "VCS GATE BLOCKED: $1" >&2
     echo "Repo rule (CLAUDE.md): we keep commits separate — no squashing, no rewriting shared history." >&2
-    echo "If the user EXPLICITLY asked for this, re-run prefixed with FOUNDLINGS_ALLOW_HISTORY_REWRITE=1" >&2
+    echo "If the user EXPLICITLY asked for this, re-run prefixed with VCS_GATE_ALLOW_HISTORY_REWRITE=1" >&2
     exit 2
   }
 
@@ -87,7 +87,7 @@ fi
 # B. no `jj new` stranding of a dirty @
 # ============================================================================
 if printf '%s' "$cmd" | grep -Eq 'jj +new\b' \
-   && ! printf '%s' "$cmd" | grep -Eq 'FOUNDLINGS_ALLOW_JJ_NEW_STRANDING=1'; then
+   && ! printf '%s' "$cmd" | grep -Eq 'VCS_GATE_ALLOW_JJ_NEW_STRANDING=1'; then
   # Isolate the `jj new … ` segment (up to the next shell separator) so flags
   # from a later chained command don't confuse target detection.
   seg="$(printf '%s' "$cmd" | grep -oE 'jj +new\b[^;&|]*' | head -1)"
@@ -129,7 +129,7 @@ if printf '%s' "$cmd" | grep -Eq 'jj +new\b' \
       echo "    jj rebase -r @ -d <target>" >&2
       echo "To keep building the current change, just keep editing (or \`jj describe\`/\`jj commit\`)." >&2
       echo "If you REALLY mean to leave the WIP behind and start fresh, re-run prefixed with" >&2
-      echo "    FOUNDLINGS_ALLOW_JJ_NEW_STRANDING=1" >&2
+      echo "    VCS_GATE_ALLOW_JJ_NEW_STRANDING=1" >&2
       exit 2
     fi
   fi

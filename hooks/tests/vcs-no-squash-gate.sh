@@ -88,7 +88,7 @@ run 0 "$CLEAN" "positional target, empty @"         'jj new main'
 run 0 "$CLEAN" "insert-after, empty @"              'jj new -A somechange'
 
 echo "== check B: the documented override disengages it =="
-run 0 "$DIRTY" "override prefix"                    'FOUNDLINGS_ALLOW_JJ_NEW_STRANDING=1 jj new main'
+run 0 "$DIRTY" "override prefix"                    'VCS_GATE_ALLOW_JJ_NEW_STRANDING=1 jj new main'
 
 echo "== check A: squash / shared-history rewrite still blocks =="
 run 2 "$DIRTY" "jj squash"                          'jj squash'
@@ -97,7 +97,7 @@ run 2 "$DIRTY" "API merge_method=squash"            'gh api repos/o/r/pulls/1/me
 run 2 "$DIRTY" "whole-branch rebase"                'jj rebase -b -d main'
 run 0 "$DIRTY" "single-revision rebase is fine"     'jj rebase -r @ -d main'
 run 0 "$DIRTY" "merge_method=merge is the right one" 'gh api repos/o/r/pulls/1/merge -f merge_method=merge'
-run 0 "$DIRTY" "history-rewrite override"           'FOUNDLINGS_ALLOW_HISTORY_REWRITE=1 jj squash'
+run 0 "$DIRTY" "history-rewrite override"           'VCS_GATE_ALLOW_HISTORY_REWRITE=1 jj squash'
 
 echo
 echo "passed=$pass failed=$fail"
