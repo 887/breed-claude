@@ -24,7 +24,7 @@ Nothing here is tied to a specific repo, VCS, or build tool. Throughout, substit
 | `<REPO>` | the project being worked on | any repo — never hardwire a name |
 | `<VCS>` | the version-control system | `jj` (colocated), `git` |
 | `<WORKSPACE-NEW>` | recipe to make an **isolated** checkout | `jj workspace add` / a `just`/make target / `git worktree add` |
-| `<CHECK>` | the **cheap** local build/type check helpers may run | `cargo check`, `tsc --noEmit`, `go build ./...`, `pytest -q` subset |
+| `<CHECK>` | the **cheap, scope-limited** check helpers may run — NEVER `--all-features`, `--all-targets`, `--workspace`, a full sweep, or `-p <composition-crate>` | `cargo check -p <crate>`, `cargo test -p <crate>`, `nextest -E 'test(x)'`, `tsc --noEmit` |
 | `<GATE>` | the **full** pre-push gate only Santa runs | `cargo clippy -D warnings` + fmt + lint + tests + deny |
 | `<TARGET>` | the branch/PR the fleet's work lands on | the plan/feature branch Santa owns |
 
@@ -39,7 +39,9 @@ Nothing here is tied to a specific repo, VCS, or build tool. Throughout, substit
   helper's changes into `<TARGET>` and you are the only one who touches the remote.
 - **Helpers only**: implement in their **own isolated workspace**, and may run the
   **cheap, scope-limited `<CHECK>`** (e.g. `cargo check -p <touched-crate>`) to
-  sanity-check their edits. They do **not** push, do **not** run the full
+  sanity-check their edits. When their change alters a public signature they
+  **enumerate the dependents and name them in the done-file** — they do NOT build
+  the expensive ones; Santa verifies those once, in the warm canonical tree. They do **not** push, do **not** run the full
   `<GATE>`/whole-project clippy/lint/test sweep — not just because it's wasteful and
   not their job, but because **each full build cold-populates that workspace's own
   multi-GB output tree (`target/` etc.), times N helpers in parallel, which fills the
@@ -296,8 +298,27 @@ its subagents' work in its own workspace and hands the single result up to you.
   parallel**. That slows every machine to a crawl and can **fill the disk to the
   point the whole run dies**. So:
   - **Helpers run ONLY the cheap, scope-limited `<CHECK>`** in their workspace
-    (`cargo check -p <touched-crate>`, `tsc --noEmit` on the touched project) —
-    never `--all-targets`/`--all-features`/a full sweep there.
+    (`cargo check -p <touched-crate>`, `cargo test -p <touched-crate>`, a named
+    `cargo nextest run -E 'test(x)'`, `tsc --noEmit` on the touched project).
+    **FORBIDDEN in a helper workspace, with no exception worth the disk:**
+    `--all-features`, `--all-targets`, the two together, `clippy` carrying either,
+    `--workspace`, a full `nextest`/`go test ./...`/`pytest` sweep, and **`-p
+    <composition-crate>`** — a crate that depends on everything (a kernel, a boot
+    or wiring crate, the composition root) is a whole-workspace build wearing a
+    `-p` costume, and its `--all-features` graph is the entire tree.
+  - **This rule is broken by a SECOND, well-meant instruction — check every brief
+    against it.** Measured: after a helper shipped an API change that broke a
+    dependent crate, the orchestrator added "check every direct dependent" to the
+    briefs. Correct instinct, ruinous mechanics — the dependent WAS the
+    composition crate, so four helpers each cold-built the world in their own
+    `target/`, and thirteen workspaces reached 60 GB. The orchestrator had quoted
+    this very rule at them in the same brief.
+  - **So verify dependents like this instead — report, then build ONCE.** The
+    helper enumerates them (`cargo metadata` gives a real census, not a guess),
+    checks only the ones that are genuinely cheap leaves, and **names the rest in
+    its done-file**. Santa builds those in the canonical warm tree — which costs
+    nothing extra, because the gate already compiles the world at push time. The
+    check moves to where the build already happens.  
   - **The full `<GATE>` and any whole-project verification/closeout run once,
     SEQUENTIALLY, in the single canonical checkout** — one **warm** output tree
     reused across every slice, not N cold ones. Finish one slice's gate+merge, then
@@ -306,9 +327,13 @@ its subagents' work in its own workspace and hands the single result up to you.
     closeout helper at the canonical checkout** (not at each slice's own workspace),
     so the heavy builds still hit a single output tree while the original helpers
     stay parked in their workspaces.
-  - **Reclaim each helper's workspace as its slice merges** (drop the workspace + its
-    output tree; e.g. `jj workspace forget <name>` + remove the dir) so idle
-    multi-GB targets don't pile up. Watch free disk across the run; if it drops
+  - **Reclaim each helper's workspace IN THE SAME STEP as its merge** (drop the
+    workspace + its output tree; e.g. `jj workspace forget <name>` + remove the
+    dir). Not "at the end of the round" — the end of a round is when the next
+    round starts, and a dead workspace is indistinguishable from a live one at a
+    glance. Measured: twelve merged slices sat un-reclaimed at 54 GB while a
+    thirteenth was still building. Tie it to the ledger update so it cannot be
+    forgotten: merge, ledger, reclaim. Watch free disk across the run; if it drops
     toward a danger threshold, stop and reclaim before continuing.
 - **Every helper works in its own isolated `<WORKSPACE-NEW>`.** Never two agents in one
   checkout. In a colocated `<VCS>`, use its workspace mechanism, never a shared-HEAD
