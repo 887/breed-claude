@@ -28,11 +28,12 @@ a process that owns no jobserver has no build pipe to hold. **This hook is
 spawned by Claude Code, not by cargo**, so a server it starts is clean by
 construction — the same command typed inside a build is not.
 
-So on any cargo invocation this gate makes the server's health a precondition:
+So on any cargo invocation this gate makes a healthy sccache a precondition:
 
+  * orphaned clients       -> reap them (see `_reap_orphan_clients`)
   * server absent          -> start it HERE, closing the lazy-spawn path
   * server wedged          -> stop + start it HERE, before cargo blocks on it
-  * server healthy         -> allow, ~11 ms
+  * all well               -> allow, ~26 ms
 
 It never blocks a build. It repairs and allows, because "your cache is unhealthy"
 is not a decision the author needs to make — the correct action is always the
@@ -64,14 +65,26 @@ sccache-internal hang; this one is an inherited descriptor.)
   advancing (`sccache --show-stats | rg 'Compile requests +[0-9]'`), NOT the log
   tail — a stale tail read twice is indistinguishable from progress, which is how
   the first wedge survived an explicit "is it still alive?" check.
+* Orphans left by a build that is killed while ANOTHER build is running: the
+  reaper's safety interlock declines to act whenever a compile driver is live,
+  because it cannot tell that build's legitimate clients from the dead ones. The
+  next cargo command with nothing else in flight cleans them up.
 * Any wrapper other than sccache.
 
 ## Cost
 
-One `sccache --show-stats` per cargo command: **11 ms measured** on this box when
-healthy. Nothing on non-cargo commands — the substring test exits first. That is
-the whole price, and it buys the elimination of a failure mode that has cost
-~11 hours.
+**26 ms measured** per cargo command on this box in the healthy state: an
+`sccache --show-stats` probe (~11 ms) plus a `pgrep -x sccache` orphan scan
+(~15 ms). Nothing at all on non-cargo commands — the token test exits first.
+
+The expensive call, `lsof` on the sccache port (~98 ms), is only reached when a
+stale client already exists, which in the healthy state is never. The scan
+cannot be skipped or made conditional on an unhealthy probe: orphans are
+INVISIBLE to the probe — the server answered `--show-stats` perfectly while two
+of them sat there for hours — and gating on probe health is exactly the blind
+spot that let the wedge recur four times.
+
+26 ms against a failure mode that has cost ~11 hours of wall-clock.
 
 When 0.18+ ships with #2771 the daemon sweeps inherited FDs itself and this gate
 becomes redundant; delete it then.
@@ -153,6 +166,115 @@ def _kills_sccache(command):
     return False
 
 
+def _sccache_pids():
+    """Every live `sccache` process. Cheap (~31 ms) and the common answer is one."""
+    try:
+        done = subprocess.run(
+            ["pgrep", "-x", "sccache"], capture_output=True, timeout=PROBE_TIMEOUT_S
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return []
+    return [int(line) for line in done.stdout.split() if line.isdigit()]
+
+
+def _build_in_flight():
+    """True if any compile driver is running, so clients may be legitimate.
+
+    This is the safety interlock for orphan reaping: the gate fires BEFORE a
+    build starts, so in the normal sequential case nothing is in flight and every
+    non-listener client is provably dead weight. If something IS building — a
+    second session, a terminal — we do nothing at all rather than risk killing a
+    healthy build's clients. A gate that kills a colleague's build gets disabled,
+    and then it protects nothing.
+    """
+    try:
+        done = subprocess.run(
+            ["pgrep", "-f", r"cargo-nextest|bin/cargo\b|bin/rustc\b"],
+            capture_output=True,
+            timeout=PROBE_TIMEOUT_S,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return True  # cannot tell -> assume busy, act on nothing
+    return bool(done.stdout.split())
+
+
+def _listening_pid():
+    """The server: whoever holds the sccache port. `None` if it cannot be told.
+
+    Identity comes from the PORT, never from `comm`. Observed on this box, the
+    server rendered as `/opt/homebrew/bin/sccache` and its clients as bare
+    `sccache` — but that difference is an accident of how each was launched
+    (absolute path vs PATH lookup), not a property, and killing the server by
+    mistake is exactly what re-triggers the lazy-respawn wedge this file exists
+    to prevent. Costs ~98 ms, so it is only ever reached on the rare path where
+    a stale client already exists.
+    """
+    port = os.environ.get("SCCACHE_SERVER_PORT", "4226")
+    try:
+        done = subprocess.run(
+            ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
+            capture_output=True,
+            timeout=PROBE_TIMEOUT_S,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    pids = [int(line) for line in done.stdout.split() if line.isdigit()]
+    return pids[0] if len(pids) == 1 else None
+
+
+def _reap_orphan_clients():
+    """Kill sccache CLIENTS left behind by a killed build. Returns how many.
+
+    ## Why this half exists
+
+    The server half of this gate does not catch the failure that actually made
+    the wedge RECUR. Killing a stuck build (`kill -9` on cargo/rustc) leaves its
+    per-compilation `sccache rustc …` CLIENT wrappers alive; they hold their
+    connection, and every later "clean" restart rejoins a pool that still
+    contains them. Measured today, mid-session:
+
+        41731  03:08:25  /opt/homebrew/bin/sccache   <- the server
+        62677  01:11:59  sccache                     <- orphan, 1h11m
+        87358  02:47:59  sccache                     <- orphan, 2h47m
+
+    Two orphans, from two previously-killed builds, while the server answered
+    `--show-stats` perfectly. **Orphans are invisible to a health probe** — which
+    is precisely why the first version of this gate reported healthy through four
+    separate wedges.
+
+    They are also invisible to the obvious search: their `comm` is `sccache`, so
+    `pgrep -f 'cargo|rustc'` — the natural thing to check after killing a build —
+    shows nothing. `pgrep -x sccache` shows them instantly. That blind spot cost
+    hours before anyone looked at the right process name.
+
+    ## The rule, and why it is safe
+
+    An orphan is a live `sccache` process that is NOT the port listener, reaped
+    only when no compile driver is running at all. With no build in flight there
+    are no legitimate clients by construction, so this cannot race one. If the
+    listener cannot be identified, nothing is killed — refusing to act beats
+    killing the server and re-triggering the lazy-respawn wedge.
+    """
+    pids = _sccache_pids()
+    if len(pids) <= 1:
+        return 0  # just the server (or nothing): the overwhelmingly common case
+    if _build_in_flight():
+        return 0  # someone is compiling; their clients are legitimate
+    server = _listening_pid()
+    if server is None:
+        return 0  # cannot tell server from client: do nothing, never guess
+    reaped = 0
+    for pid in pids:
+        if pid == server:
+            continue
+        try:
+            os.kill(pid, 9)
+            reaped += 1
+        except OSError:
+            pass  # already gone between the scan and here — fine
+    return reaped
+
+
 def _probe():
     """(healthy, running). Never raises."""
     try:
@@ -226,6 +348,13 @@ def check(command):
         return None
     if os.environ.get("RUSTC_WRAPPER", "").split("/")[-1] != "sccache":
         return None
+
+    # Orphaned clients are checked FIRST and unconditionally, because they are
+    # invisible to the health probe below — the server answered `--show-stats`
+    # perfectly while two of them sat there for hours. Gating this on an
+    # unhealthy probe would reproduce exactly the blind spot that let the wedge
+    # recur four times.
+    _reap_orphan_clients()
 
     healthy, running = _probe()
     if healthy:

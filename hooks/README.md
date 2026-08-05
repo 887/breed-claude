@@ -395,12 +395,51 @@ which IS macOS-specific: a pthread-mutex deadlock. Same symptom, different bug.)
 own inherited descriptors and this becomes dead weight. Noted here and in the
 file so it is removed rather than accumulating.
 
+### The half that made it RECUR: orphaned clients
+
+The server story above is only one of the two failures, and it is not the one
+that kept bringing the wedge back. Killing a stuck build (`kill -9` on
+cargo/rustc) leaves that build's per-compilation `sccache rustc …` **CLIENT**
+wrappers alive. They keep their connection, and every later "clean" restart
+rejoins a pool that still holds them. Measured mid-session:
+
+```
+41731  03:08:25  /opt/homebrew/bin/sccache   <- the server
+62677  01:11:59  sccache                     <- orphan, 1h11m
+87358  02:47:59  sccache                     <- orphan, 2h47m
+```
+
+Two orphans from two previously-killed builds — **while the server answered
+`--show-stats` perfectly.** Orphans are invisible to a health probe, which is
+why the first version of this gate reported healthy through four separate
+wedges. They are invisible to the obvious search too: their `comm` is `sccache`,
+so `pgrep -f 'cargo|rustc'` — the natural thing to check after killing a build —
+shows nothing at all. `pgrep -x sccache` shows them instantly. That single blind
+spot cost hours.
+
+**The rule:** an orphan is a live `sccache` process that is not the port
+listener, reaped only when **no compile driver is running anywhere**. With no
+build in flight there are no legitimate clients by construction, so the reaper
+cannot race one — that interlock is what makes it safe, not a heuristic about
+process age. Server identity comes from the **port**, never from `comm`: the
+server rendered as `/opt/homebrew/bin/sccache` and its clients as bare `sccache`
+above, but that is an accident of absolute-path versus PATH launch, and killing
+the server by mistake re-triggers the very lazy-respawn wedge this file exists to
+prevent. If the listener cannot be identified, nothing is killed.
+
+**Cost:** 26 ms per cargo command healthy (11 ms probe + 15 ms `pgrep`). The
+98 ms `lsof` is reached only when a stale client already exists. The scan cannot
+be made conditional on an unhealthy probe — that is precisely the blind spot
+described above.
+
 **What it deliberately does not catch:** builds run outside the Bash tool; a
 server that wedges *during* a build it was healthy at the start of (nothing at
 the boundary can see that — there the signal is the request counter advancing,
 `sccache --show-stats | rg 'Compile requests +[0-9]'`, never the log tail, since
-a stale tail read twice is indistinguishable from progress); any wrapper that is
-not sccache.
+a stale tail read twice is indistinguishable from progress); orphans left when a
+build is killed while ANOTHER build is running, since the interlock declines to
+act then — the next cargo command with nothing in flight clears them; any
+wrapper that is not sccache.
 
 ## What does NOT belong here
 
