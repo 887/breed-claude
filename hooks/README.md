@@ -20,6 +20,7 @@ files out.
 | `git-no-interactive.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
 | `jj-no-update-stale.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
 | `jj-no-strand.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` + a jj repo |
+| `sccache-health.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` + `sccache` (Unix; no-ops on Windows) |
 
 ### `gate.py` — one registration, four gates, one process
 
@@ -343,6 +344,63 @@ the multi-workspace arrangement where staleness arises and where update-stale ge
 run, so a project-scoped copy of this guard is inert precisely when it is needed.
 Anything standing between an agent and **irreversible data loss** has to be user
 scope for that reason alone.
+
+### `sccache-health.py` — the build that wedges at 0% CPU, and the loop that re-creates it
+
+**The bug is upstream and unreleased:** [mozilla/sccache#2771](https://github.com/mozilla/sccache/pull/2771).
+The sccache server is **lazily fork+exec'd by whichever compile-job client first
+needs it**, and it inherits that client's open file descriptors — including
+cargo's jobserver pipe. The long-lived daemon then holds that pipe's write end
+open forever, the writer never sees EOF, and the build deadlocks **at 0.0% CPU**
+with its output frozen mid-`Compiling <crate>`.
+
+It is indistinguishable from a slow compile by looking at it. Measured in one
+session: **5h43m + 3h32m + 1h41m** of wall-clock lost.
+
+**Why discipline could not fix it.** The recovery action *is* the bug:
+
+```
+wedge -> kill -9 the server -> re-run cargo -> cargo LAZILY SPAWNS a new server,
+which inherits THIS cargo's jobserver pipe -> wedged again
+```
+
+All three wedges above were that cycle. The remedy was written into two files
+between the second and third one and did not prevent the third — the standing
+lesson that a warning is invisible at the point of the mistake.
+
+**Why a hook is the right shape, and not merely a convenient one.** The single
+property that fixes this is *who starts the server*: one started by a process
+owning no jobserver has no build pipe to hold. **A hook is spawned by Claude
+Code, not by cargo**, so a server it starts is clean by construction — the same
+command typed inside a build is not. The gate is not automating a remedy a human
+could type; it is the only place the remedy is reliably correct.
+
+So on `cargo …` it probes the server (**11 ms** when healthy) and, if absent or
+wedged, stops and starts it *from the hook process*, then allows the build. It
+never blocks one — there is only ever one correct action, so making the author
+choose it would be ceremony. Separately it **refuses** `pkill sccache` /
+`kill -9 $(pgrep sccache)`, pointing at `sccache --stop-server`, because that is
+the action that re-creates the state.
+
+**Platform: every Unix, deliberately NOT macOS-only.** The instinct is to scope a
+bug to the box it was found on; that would leave Linux unprotected. The mechanism
+is plain POSIX fd inheritance across `fork`+`exec`, #2771's own reproducer is a
+`ninja` build piping through `tee`, and its fix is gated `cfg(unix)`. Windows is
+the real exception and #2771 says why — *"On Windows there is no daemon fork"* —
+so the gate no-ops there rather than paying a probe for an impossible failure.
+(Not to be confused with [#221](https://github.com/mozilla/sccache/issues/221),
+which IS macOS-specific: a pthread-mutex deadlock. Same symptom, different bug.)
+
+**Delete this gate when sccache 0.18+ ships #2771** — the daemon then sweeps its
+own inherited descriptors and this becomes dead weight. Noted here and in the
+file so it is removed rather than accumulating.
+
+**What it deliberately does not catch:** builds run outside the Bash tool; a
+server that wedges *during* a build it was healthy at the start of (nothing at
+the boundary can see that — there the signal is the request counter advancing,
+`sccache --show-stats | rg 'Compile requests +[0-9]'`, never the log tail, since
+a stale tail read twice is indistinguishable from progress); any wrapper that is
+not sccache.
 
 ## What does NOT belong here
 

@@ -95,6 +95,15 @@ echo "== a BROKEN gate blocks LOUDLY (never silently skipped) =="
 SANDBOX="$(mktemp -d)"
 trap 'rm -rf "$SANDBOX"' EXIT
 cp "$HOOKS"/*.py "$SANDBOX/"
+# `_shellscan.py` is deliberately NOT symlinked into the installed dir (see
+# install.sh), so copying `$HOOKS/*.py` alone leaves the sandbox without it and
+# `rg-flag-gate` — the FIRST gate in the order — dies on the import. Every
+# assertion below about WHICH gate is named then reports rg-flag-gate no matter
+# which one was corrupted, and the test silently stops testing what it says it
+# does. Take the helper from the repo, where it lives.
+# `$0` is usually the SYMLINK in the installed dir, whose parent has no
+# `_shellscan.py` either — so resolve to the real file's repo before looking.
+cp "$(python3 -c 'import os,sys; print(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))))' "$0")/_shellscan.py" "$SANDBOX/" 2>/dev/null || true
 printf 'def check(command):\n    this is not python\n' > "$SANDBOX/git-no-interactive.py"
 
 run 2 "broken gate blocks its own domain"  'git commit -m "fine normally"' "$SANDBOX/gate.py"
