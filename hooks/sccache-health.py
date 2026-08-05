@@ -342,6 +342,16 @@ def check(command):
             "  Use instead:  sccache --stop-server\n"
             "  You do not need to start it again by hand — this gate starts a clean\n"
             "  server automatically before the next cargo command.\n"
+            "\n"
+            "  IF --stop-server IS NOT ENOUGH — and sometimes it is not: it stops the\n"
+            "  SERVER but leaves hung CLIENTS behind (observed: `--stop-server`\n"
+            "  returned success with three sccache processes still alive) — then the\n"
+            "  hard kill genuinely is the recovery, and this gate is in your way:\n"
+            "\n"
+            "      CLAUDE_GATE_SKIP=1 pkill -9 -x sccache\n"
+            "\n"
+            "  Then start one clean server before the next build:\n"
+            "      SCCACHE_IDLE_TIMEOUT=0 sccache --start-server\n"
         )
 
     if not _is_build(command):
