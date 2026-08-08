@@ -183,6 +183,25 @@ run through the `Monitor` tool so each stdout line becomes one event:
 <skill-dir>/watch-elves.sh <report-dir> codex codex2 codex3
 ```
 
+**For a long campaign, arm `supervise-elves.sh` instead** (shipped next to this
+file); it wraps the watcher and closes the one gap the watcher cannot close for
+itself:
+
+```bash
+HB_EVERY=600 <skill-dir>/supervise-elves.sh <report-dir> codex codex2 codex3
+```
+
+Edge-triggering is what keeps `watch-elves.sh` from becoming the context problem
+it exists to solve — but it also means **a healthy quiet watcher and a dead one
+emit exactly the same thing: nothing.** Silence is not evidence that the fleet is
+fine. The supervisor adds three things: a `HEARTBEAT` on a fixed cadence (so
+silence past ~2 beats is *diagnostic*), an append-only log so events survive the
+harness task dying and can be read back afterwards, and auto-restart if the
+watcher exits — with the restart emitted as its own event. Verify the monitor is
+alive before you end a turn, not merely that you started one; the harness-side
+task can die while the shell process lingers, so a process count is not proof.
+The log is.
+
 It emits seven signals, and **only on a state transition**:
 
 | Event | Trigger | Your response |
