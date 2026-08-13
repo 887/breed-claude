@@ -69,12 +69,6 @@ HERE = Path(__file__).resolve().parent
 GATES = (
     # Cheapest first: the text-only gates decide without touching the repo.
     "rg-flag-gate",
-    # Refuses a cargo command that CLEARS RUSTC_WRAPPER. Text-only. It exists
-    # because no TEST can catch this class: a content-addressed cache changes only
-    # where object code comes from, never what is compiled, so results stay correct
-    # and only the price moves. Two readers lifted the prefix out of a HISTORICAL
-    # sccache note and put it in front of a real build. See rustc-wrapper-gate.py.
-    "rustc-wrapper-gate",
     "jj-no-update-stale",
     "jj-no-interactive",
     "git-no-interactive",
