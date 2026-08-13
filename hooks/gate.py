@@ -75,11 +75,6 @@ GATES = (
     # Last: these SHELL OUT, but each only for the commands it owns, so every
     # other Bash call still exits above without paying for a subprocess.
     "jj-no-strand",
-    # `cargo …` only: probes the sccache server (~11 ms) and repairs it in place,
-    # rather than letting cargo lazily spawn one that inherits its jobserver pipe
-    # and deadlocks the build at 0% CPU. Also refuses `pkill sccache`, which is
-    # the action that re-creates that state. See sccache-health.py.
-    "sccache-health",
 )
 
 ESCAPE = "CLAUDE_GATE_SKIP"
