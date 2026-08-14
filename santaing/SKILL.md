@@ -156,6 +156,24 @@ phases build on each other, this matters twice over:
 the permanent-lane arrangement compound: the author sees the rule and stops reproducing
 it, instead of an integrator silently absorbing the same finding repeatedly.
 
+**Watch for silent model changes and memory pressure — both look like healthy work.**
+A tmux agent can fall back to a smaller model mid-run; the footer is the only place it
+shows. An integrator on a 200k window carrying 400k of context keeps reasoning fluently
+while dropping the verification history it is merging on. Check the model line, not the
+output quality. Fix with `/model`, choosing the large-context variant explicitly — the
+bare model name may select a smaller window.
+
+**N lanes compiling at once is over-subscription, and the machine says so before you do.**
+Watch swap, not just liveness. When it thrashes, park lanes rather than capping the
+build's job count — the repo's `jobs` value is checked in and stands. Park the lanes
+whose output is *already queued for merge*: more branches from them cannot help while
+the integrator is the constraint. Tell a parked lane a kill by `signal: 9` is the
+machine, not its branch, or it will diagnose a defect that is not there.
+
+**Releasing a parked lane takes `/goal resume`, not a message.** An interrupted goal
+shows `Goal stalled` and a plain instruction leaves it stalled — it acknowledges and
+does nothing.
+
 **A PR comment does not reach a lane. Santa relays every finding into the pane.**
 A tmux lane reads its pane; nothing makes it poll GitHub. So a finding left only as a PR
 comment lands where the one agent who must act on it never looks — and the failure is
