@@ -62,13 +62,27 @@ see santaing):
    prefer the `--` form so codex starts directly and you don't race a shell prompt:
 
    ```bash
-   # Preferred: launch codex directly as the session command, in <DIR>.
-   tmux new-session -d -s "$S" -c "<DIR>" -- codex
-
-   # Equivalent when you want a shell first (e.g. to make the workspace, then start):
+   # REQUIRED: launch a SHELL, then the agent inside it.
    tmux new-session -d -s "$S" -c "<DIR>"
    tmux send-keys -t "$S" "codex" Enter
+
+   # DO NOT do this — no shell in the path:
+   #   tmux new-session -d -s "$S" -c "<DIR>" -- codex
    ```
+
+   **Why the shell is not optional.** `tmux new-session -- codex` starts the agent with
+   **no shell in its path**, so it inherits the **tmux server's** environment — which is
+   as old as the server, not as old as the session. A profile fix (`~/.zshenv`) reaches
+   every shell including non-interactive ones, and **cannot** reach a process that never
+   ran one. Observed: a tmux server predating a build-cache switch handed harness-spawned
+   agents a `RUSTC_WRAPPER` pointing at an uninstalled binary; every push died inside the
+   gate, and the gate blamed *documentation*. Shell-spawned lanes on the same host were
+   fine, which made it look session-specific rather than structural.
+
+   **Repair a mis-spawned agent without losing context:** session id from
+   `~/.claude/projects/<project-dir>/<id>.jsonl` (newest mtime) → kill the tmux session →
+   recreate it running the shell → `codex resume <id>` (or `claude --resume <id>`) inside
+   it. Verify the variable directly in the new session before concluding it worked.
 
    Notes:
    - `-c <DIR>` sets the pane's working directory; alternatively pass `codex -C <DIR>`

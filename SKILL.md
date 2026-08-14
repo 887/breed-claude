@@ -61,8 +61,16 @@ Given a personality name `<P>`:
 
 3. **Launch the spawn:**
    ```bash
-   tmux new-session -d -s <session> -- claude --remote-control --name "$display_name"
+   tmux new-session -d -s <session> -c "$PWD"
+   tmux send-keys -t <session> 'claude --remote-control --name "'"$display_name"'"' Enter
    ```
+
+   **Launch a SHELL first — never `-- claude` directly.** An agent spawned as the session
+   command has **no shell in its path** and inherits the **tmux server's** environment,
+   which is as old as the server. A `~/.zshenv` fix reaches every shell including
+   non-interactive ones and cannot reach a process that never ran one. This has produced a
+   stale `RUSTC_WRAPPER` pointing at an uninstalled binary, failing every push inside a
+   gate that then blamed documentation.
    Detached (`-d`) + the pseudo-TTY tmux gives are both required. The `--` separates tmux options from the command-to-run so the multi-word `--name` arg passes through cleanly without shell-quoting gymnastics. `--remote-control` opens a browser-connectable session and prints a `https://claude.ai/code/session_…` URL on startup. `--name` pre-sets the display name so the user sees `<P> (home-…)` instead of the auto-generated default.
 
 4. **Wait ~5 seconds** for Claude to finish its startup banner and be ready to accept input.
