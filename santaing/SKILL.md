@@ -169,6 +169,12 @@ while dropping the verification history it is merging on. Check the model line, 
 output quality. Fix with `/model`, choosing the large-context variant explicitly — the
 bare model name may select a smaller window.
 
+**Size the fleet to the INTEGRATOR's throughput, not to the number of slices.**
+One integrator verifying thoroughly is the serial constraint. Lanes that outproduce it
+do not ship sooner — they queue, while contending for the same shared build cache and
+slowing every lane including the integrator's own. If the queue keeps growing, park
+lanes that already have a PR in it. Three lanes that merge beat five that wait.
+
 **N lanes compiling at once is over-subscription, and the machine says so before you do.**
 Watch swap, not just liveness. When it thrashes, park lanes rather than capping the
 build's job count — the repo's `jobs` value is checked in and stands. Park the lanes
