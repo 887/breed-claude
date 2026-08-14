@@ -46,8 +46,10 @@ not touch the checkout.
   rudolph's working copy mid-verification. Verify through `git ls-remote` and `gh api`,
   which read the remote without touching local VCS state, or ask rudolph to run it.
 - **Helpers (elves)**: implement in their **own isolated workspace**. They **push their
-  own branch and open their own PR**; they never merge. **One open PR per lane at a
-  time** — a lane pushes each new substep onto the SAME branch and lets the PR grow,
+  own branch and open their own PR**; they never merge. **One standing branch and one
+  open PR per lane** — name the branch after the lane's phase (`rp-lane`, `qq-lane`,
+  `tj-lane`), not after the substep, so there is one obvious place every substep goes.
+  **One open PR per lane at a time** — a lane pushes each new substep onto the SAME branch and lets the PR grow,
   and only opens a fresh PR once the integrator has merged the previous one. N open
   PRs from one lane multiply the integrator's verification work N times over the same
   phase, and the integrator is already the serial bottleneck. Letting them push means the
