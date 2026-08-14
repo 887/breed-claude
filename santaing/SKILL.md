@@ -46,7 +46,11 @@ not touch the checkout.
   rudolph's working copy mid-verification. Verify through `git ls-remote` and `gh api`,
   which read the remote without touching local VCS state, or ask rudolph to run it.
 - **Helpers (elves)**: implement in their **own isolated workspace**. They **push their
-  own branch and open their own PR**; they never merge. Letting them push means the
+  own branch and open their own PR**; they never merge. **One open PR per lane at a
+  time** — a lane pushes each new substep onto the SAME branch and lets the PR grow,
+  and only opens a fresh PR once the integrator has merged the previous one. N open
+  PRs from one lane multiply the integrator's verification work N times over the same
+  phase, and the integrator is already the serial bottleneck. Letting them push means the
   push gate runs at their desk, surfacing findings where the author is — and it means
   they never idle waiting on integration.
   They may run the **cheap, scope-limited `<CHECK>`** (e.g. `cargo check -p <touched-crate>`).
