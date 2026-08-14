@@ -89,8 +89,15 @@ Brief it once as a **standing role**, not a task. The brief must carry:
 - **Stop rather than resolve** a conflict in any shared bookkeeping file (allow-lists,
   ledgers). Those have no mechanically obvious side: one arm restores retired entries,
   the other silently drops live ones, and both produce a plausible file.
-- **Fix gate findings, never baseline them**; never a gate-skip; never an override
-  without explicit per-instance authorization from Santa.
+- **Do NOT fix gate findings — report them.** Leave a PR comment with the rule name, the
+  file:line, the verbatim gate output, and what would satisfy it; tell Santa the PR
+  failed and why; move to the next branch without blocking. **A fix by rudolph teaches
+  nobody**: in one campaign the same lint was fixed by the integrator twice in an hour
+  because the lane that produced it never saw the rule. A comment reaches the author.
+- **Never baseline, never gate-skip, never override** without explicit per-instance
+  authorization from Santa. Only *who fixes* changed, not *whether* it gets fixed.
+- **Report BOTH outcomes** — merged and failed — to Santa and on the PR. Santa needs both
+  to tell an improving lane from a repeating one.
 - **Report after each merge, not per queue** — and **report absences too**. A prediction
   that fails is as informative as one that holds.
 
@@ -105,6 +112,21 @@ user's stated preference; there is no fixed number. What is fixed is the shape:
 - before every step: fetch, rebase onto trunk, and **abandon changes that have become
   empty** — an empty change post-rebase is work that landed, not work lost
 - after a step: push the branch, open or update the PR, **and immediately continue**
+
+**Give each long-running phase a PERMANENT lane.** A phase that keeps getting picked up
+and put down is re-derived every time; a permanent lane keeps the map in its head. Where
+phases build on each other, this matters twice over:
+
+- **Their work lands on trunk continuously, not at phase completion.** Rudolph merges
+  what is ready as it is ready, even while the phase has work left.
+- **Each rebases onto trunk at the start of every WP or substep**, so it picks up the
+  others' landed work instead of diverging from it.
+- Expect several phase PRs open and **growing** at once. Rudolph re-reads each head
+  immediately before merging — the change-ID list it inspected may be short by then.
+
+**When a lane's PR fails the gate, the LANE fixes it, not rudolph.** That is what makes
+the permanent-lane arrangement compound: the author sees the rule and stops reproducing
+it, instead of an integrator silently absorbing the same finding repeatedly.
 
 ---
 
