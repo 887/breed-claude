@@ -62,7 +62,15 @@ BENIGN_RE='Update available! *Run:'
 # Match instead on the three things Claude shows only while live: the streaming
 # token counter, an in-flight Bash tool, and the backgrounding hint printed
 # beside it. Verified against a real Claude lane mid-run and at an idle prompt.
-WORKING_RE='esc to interrupt|Working \(|· ↓ [0-9]|Running… \(|ctrl\+b ctrl\+b|background terminal'
+WORKING_RE='esc to interrupt|Working \(|· ↓ [0-9]|Running… \(|ctrl\+b ctrl\+b|background terminal|[0-9]+ shells?|[0-9]+ monitors?'
+# `N shell` / `N monitor` were added 2026-08-14 after a THIRD false IDLE: a Claude
+# lane waiting on a cold compile with a Monitor armed shows no spinner at all —
+# it had already printed its progress and was blocked on a background job — but
+# its footer steadily reads `bypass permissions on · 1 shell, 1 monitor`. That is
+# the same kind of signal as `background terminal`: it persists for the whole
+# wait instead of flickering between redraws. Verified with a behavioural test
+# over six working panes and three genuinely-idle ones; the idle cases carry
+# neither token, so this does not trade a false IDLE for a false WORKING.
 # `background terminal` is the STEADIEST of these. The spinner line is cleared
 # between redraws, so two captures landing in that gap trip the idle debounce on a
 # lane that is plainly working — codex3 raised three false IDLE-STALLs during a
