@@ -1,6 +1,6 @@
 ---
 name: santaing
-description: Run a fleet of headless coding agents as a controlled workshop — YOU are Santa (the orchestrator that owns the canonical checkout, the pushes, and the merge gate); the agents are your little helpers (a dynamic number of Codex/Claude sessions in tmux, each in its own isolated VCS workspace) that fan out and do the heavy implementation while you integrate, verify, and ship. Use when the user says "go santaing", "drive the fleet", "orchestrate the codexes", "use the helpers to build X", "santa this plan", "fan the helpers out on <plan/branch>", or otherwise asks you to coordinate several tmux agents toward one goal while you keep sole control of pushes and gate checks. The core discipline: helpers only run the cheap local check and never push; Santa alone pushes, runs the full gate, fixes, and merges. Repo-, VCS-, and build-tool-agnostic — nothing about a specific project is hardwired. Composes the breed-codex (and breed-claude) primitives for spawning/briefing/goal-setting/monitoring individual agents.
+description: Run a fleet of headless coding agents as a controlled workshop — YOU are Santa, the orchestrator: you brief the helpers, make the decisions, keep the ledger, and touch NO checkout. Always create **rudolph**, a dedicated tmux integrator that owns the canonical checkout and is the only agent that merges. The elves (a dynamic number of Codex/Claude sessions in tmux, count and kind the user's call) each work an isolated VCS workspace on a long-lived branch per phase, push their own branch, open their own PR, and keep working without waiting. Use when the user says "go santaing", "drive the fleet", "orchestrate the codexes", "use the helpers to build X", "santa this plan", "fan the helpers out on <plan/branch>", or otherwise asks you to coordinate several tmux agents toward one goal. The core discipline: elves push branches and never merge; rudolph runs the full gate and merges; Santa orchestrates and never touches the canonical checkout. Never run the integrator as an orchestrator subagent — it reinitialises context every message and burns tokens rebuilding what a tmux agent simply keeps. Repo-, VCS-, and build-tool-agnostic — nothing about a specific project is hardwired. Composes the breed-codex (and breed-claude) primitives for spawning/briefing/goal-setting/monitoring individual agents.
 ---
 
 # santaing
@@ -25,31 +25,86 @@ Nothing here is tied to a specific repo, VCS, or build tool. Throughout, substit
 | `<VCS>` | the version-control system | `jj` (colocated), `git` |
 | `<WORKSPACE-NEW>` | recipe to make an **isolated** checkout | `jj workspace add` / a `just`/make target / `git worktree add` |
 | `<CHECK>` | the **cheap, scope-limited** check helpers may run — NEVER `--all-features`, `--all-targets`, `--workspace`, a full sweep, or `-p <composition-crate>` | `cargo check -p <crate>`, `cargo test -p <crate>`, `nextest -E 'test(x)'`, `tsc --noEmit` |
-| `<GATE>` | the **full** pre-push gate only Santa runs | `cargo clippy -D warnings` + fmt + lint + tests + deny |
-| `<TARGET>` | the branch/PR the fleet's work lands on | the plan/feature branch Santa owns |
+| `<GATE>` | the **full** gate only rudolph runs | `cargo clippy -D warnings` + fmt + lint + tests + deny |
+| `<TARGET>` | the trunk the fleet's work lands on | `main`, or the phase branch rudolph owns |
 
 ---
 
 ## The one rule that defines santaing
 
-**Santa owns the integration boundary; helpers never cross it.**
+**The integration boundary is owned by exactly one agent; helpers never cross it.**
 
-- **Santa (you) alone**: owns the canonical checkout, **pushes**, runs the **full
-  `<GATE>`**, fixes gate failures, resolves conflicts, and **merges**. You pull each
-  helper's changes into `<TARGET>` and you are the only one who touches the remote.
-- **Helpers only**: implement in their **own isolated workspace**, and may run the
-  **cheap, scope-limited `<CHECK>`** (e.g. `cargo check -p <touched-crate>`) to
-  sanity-check their edits. When their change alters a public signature they
-  **enumerate the dependents and name them in the done-file** — they do NOT build
-  the expensive ones; Santa verifies those once, in the warm canonical tree. They do **not** push, do **not** run the full
-  `<GATE>`/whole-project clippy/lint/test sweep — not just because it's wasteful and
-  not their job, but because **each full build cold-populates that workspace's own
-  multi-GB output tree (`target/` etc.), times N helpers in parallel, which fills the
-  disk** (see the disk/artifact hard rule below) — do **not** merge, and do **not**
-  touch the canonical checkout or each other's workspace.
+That agent is **rudolph** — a dedicated tmux agent that owns the canonical checkout and
+is the only one that merges. **Always create a rudolph.** Santa orchestrates and does
+not touch the checkout.
 
-If you remember one thing: **helpers `<CHECK>`; Santa `<GATE>` + push + merge.** Santa
-is the only one at the sleigh.
+- **Rudolph alone**: owns the canonical checkout, runs the **full `<GATE>`**, fixes gate
+  findings, and **merges**. It is the only agent that writes to `<TARGET>`.
+- **Santa (you)**: briefs helpers, makes decisions, keeps the ledger, and hands rudolph
+  branches. **You do not touch the canonical checkout** — not `jj git fetch`, not
+  `jj new`, not a rebase. Every one of those mutates shared state and will strand
+  rudolph's working copy mid-verification. Verify through `git ls-remote` and `gh api`,
+  which read the remote without touching local VCS state, or ask rudolph to run it.
+- **Helpers (elves)**: implement in their **own isolated workspace**. They **push their
+  own branch and open their own PR**; they never merge. Letting them push means the
+  push gate runs at their desk, surfacing findings where the author is — and it means
+  they never idle waiting on integration.
+  They may run the **cheap, scope-limited `<CHECK>`** (e.g. `cargo check -p <touched-crate>`).
+  When a change alters a public signature they **enumerate the dependents and name them
+  in the report** — they do NOT build the expensive ones; rudolph verifies those once, in
+  the warm canonical tree. They **never** run the full `<GATE>`/whole-project sweep in
+  their own workspace: **each full build cold-populates that workspace's own multi-GB
+  output tree, times N helpers in parallel, which fills the disk** (see the disk/artifact
+  hard rule below). And they never touch the canonical checkout or each other's workspace.
+
+If you remember one thing: **elves `<CHECK>` + push their branch; rudolph `<GATE>` +
+merges; Santa orchestrates and touches nothing.**
+
+---
+
+## Rudolph — the integrator, always a tmux agent
+
+**Always create one.** Never run the integrator as an orchestrator subagent: a subagent
+reinitialises its context on every message, so the integration knowledge — which
+branches are dangerous, which conflicts must not be resolved, what was already verified
+— is rebuilt from scratch each time and burns tokens doing it. A tmux agent keeps it.
+
+```bash
+tmux new-session -d -s rudolph -c <CANONICAL-CHECKOUT> -- claude --name "rudolph (integrator)"
+```
+
+Brief it once as a **standing role**, not a task. The brief must carry:
+
+- **The boundary**: it merges, elves never do; Santa never touches its checkout.
+- **Verify by CONTENT, not ancestry.** A change can be an ancestor of the trunk with its
+  content absent. Pair every claim with a **control that must come out different** — a
+  marker present after the merge and absent on the pre-merge revision.
+- **Route stderr separately from stdout.** An error's text is non-empty and reads as
+  success. This single habit catches more than any other.
+- **Know which outputs are impossible, not merely wrong** — an empty trunk ref, a subset
+  larger than its total, a test count from a run you watched compile. When one appears,
+  **suspect the instrument, never the repository.** Impossibility ends the argument;
+  a wrong value only starts one about methodology.
+- **Never squash** — change IDs are the durable identifiers a ledger cites.
+- **Stop rather than resolve** a conflict in any shared bookkeeping file (allow-lists,
+  ledgers). Those have no mechanically obvious side: one arm restores retired entries,
+  the other silently drops live ones, and both produce a plausible file.
+- **Fix gate findings, never baseline them**; never a gate-skip; never an override
+  without explicit per-instance authorization from Santa.
+- **Report after each merge, not per queue** — and **report absences too**. A prediction
+  that fails is as informative as one that holds.
+
+## Elves — count and kind are the user's call
+
+**How many elves and whether they are codex or claude is dynamic.** Ask or take the
+user's stated preference; there is no fixed number. What is fixed is the shape:
+
+- one isolated workspace each
+- **a long-lived branch per phase**, not per task — each step is the base for the next,
+  and re-deriving it is how a serial lane or a multi-step migration stalls
+- before every step: fetch, rebase onto trunk, and **abandon changes that have become
+  empty** — an empty change post-rebase is work that landed, not work lost
+- after a step: push the branch, open or update the PR, **and immediately continue**
 
 ---
 
@@ -180,7 +235,7 @@ minutes ago."**
 run through the `Monitor` tool so each stdout line becomes one event:
 
 ```bash
-<skill-dir>/watch-elves.sh <report-dir> codex codex2 codex3
+<skill-dir>/watch-elves.sh <report-dir> codex codex2 codex3 rudolph
 ```
 
 **For a long campaign, arm `supervise-elves.sh` instead** (shipped next to this
@@ -188,7 +243,7 @@ file); it wraps the watcher and closes the one gap the watcher cannot close for
 itself:
 
 ```bash
-HB_EVERY=600 <skill-dir>/supervise-elves.sh <report-dir> codex codex2 codex3
+HB_EVERY=600 <skill-dir>/supervise-elves.sh <report-dir> codex codex2 codex3 rudolph
 ```
 
 Edge-triggering is what keeps `watch-elves.sh` from becoming the context problem
@@ -272,7 +327,7 @@ When a helper signals done:
 4. **Run the full `<GATE>`** on `<TARGET>`. Fix whatever it flags — *this is Santa's
    job, not the helper's.* (You may hand a well-scoped fix back to a helper, but the
    gate itself runs on your checkout.)
-5. **Push `<TARGET>`.** Only Santa pushes.
+5. **Merge to `<TARGET>`.** Only rudolph merges — never squash; change IDs are the durable identifiers a ledger cites.
 
 ### 5. Reassign or wind down
 
@@ -305,7 +360,7 @@ its subagents' work in its own workspace and hands the single result up to you.
 
 ## Hard rules — don't break these
 
-- **Only Santa pushes, runs `<GATE>`, and merges.** Helpers run `<CHECK>` at most.
+- **Only rudolph merges and runs the full `<GATE>`.** Elves run `<CHECK>` and push their own branch; Santa touches no checkout at all.
   This is the whole point; if a helper pushes, the discipline is gone.
 - **Heavy builds live in ONE checkout — never multiplied across the N helper
   workspaces (the disk/artifact bomb).** Every isolated `<WORKSPACE-NEW>` has its
