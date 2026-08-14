@@ -70,8 +70,30 @@ branches are dangerous, which conflicts must not be resolved, what was already v
 — is rebuilt from scratch each time and burns tokens doing it. A tmux agent keeps it.
 
 ```bash
-tmux new-session -d -s rudolph -c <CANONICAL-CHECKOUT> -- claude --name "rudolph (integrator)"
+# Launch a SHELL first, then the agent inside it. Never `-- claude` directly.
+tmux new-session -d -s rudolph -c <CANONICAL-CHECKOUT>
+tmux send-keys -t rudolph 'claude --name "rudolph (integrator)"' Enter
 ```
+
+**Spawn every tmux agent through a shell — this applies to elves too.** `tmux
+new-session -- claude` starts the harness with **no shell in its path**, so it inherits
+the **tmux server's** environment, which is as old as the server. A profile fix
+(`~/.zshenv`) reaches every shell including non-interactive ones — and cannot reach a
+process that never ran one.
+
+The failure is nasty because it is invisible and misattributed: on one machine the tmux
+server predated a build-cache change, so harness-spawned agents carried a
+`RUSTC_WRAPPER` pointing at an uninstalled binary. Every push died inside the gate, and
+the gate reported it as a *documentation* failure — sending the author to audit docs
+that were never wrong. Shell-spawned lanes on the same host pushed fine, which made it
+look session-specific rather than structural.
+
+**To repair an already-mis-spawned agent without losing its context:** take its session
+id from `~/.claude/projects/<project-dir>/<id>.jsonl` (newest mtime), kill the tmux
+session, recreate it running the shell, then `claude --resume <id>` inside it. The
+conversation is on disk; only the process is replaced. **Verify the fix directly** —
+`echo $RUSTC_WRAPPER` (or whatever the variable was) in the new session, before
+concluding it worked.
 
 Brief it once as a **standing role**, not a task. The brief must carry:
 
