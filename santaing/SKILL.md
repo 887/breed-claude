@@ -156,6 +156,25 @@ phases build on each other, this matters twice over:
 the permanent-lane arrangement compound: the author sees the rule and stops reproducing
 it, instead of an integrator silently absorbing the same finding repeatedly.
 
+**A PR comment does not reach a lane. Santa relays every finding into the pane.**
+A tmux lane reads its pane; nothing makes it poll GitHub. So a finding left only as a PR
+comment lands where the one agent who must act on it never looks — and the failure is
+silent in the worst way: the comment exists, it is correct, it is even courteous, and
+the work simply never happens.
+
+- **Rudolph reports each finding to Santa AND comments on the PR.** The comment is the
+  durable record for humans and for the next integrator; the relay is what actually
+  changes the code.
+- **Santa relays it into the lane's pane**, in full — file, exact edit, and why no gate
+  caught it. Do not summarise it to "see the PR comment".
+- **The tell is repetition without motion:** the same finding commented twice and pushes
+  landing in between that do not touch the named file. Read that as *not delivered*,
+  not as *deprioritised*. Instruct rudolph to escalate rather than comment a third time —
+  a third comment is the protocol failing louder, not working.
+- **Numbers in a comment go stale on a standing branch.** Whenever a finding carries
+  measured values, the relay must say **re-derive at the moment of commit, never copy
+  the figure** — the lane's own progress is what invalidates it.
+
 ---
 
 ## Roles and topology
