@@ -94,6 +94,12 @@ Brief it once as a **standing role**, not a task. The brief must carry:
   failed and why; move to the next branch without blocking. **A fix by rudolph teaches
   nobody**: in one campaign the same lint was fixed by the integrator twice in an hour
   because the lane that produced it never saw the rule. A comment reaches the author.
+  - **Carry the measurements, AND tell the lane to re-measure.** A comment naming the
+    exact numbers saves the author a re-derivation — but on a **standing branch the lane
+    keeps pushing to**, those numbers have a shelf life and the lane will invalidate them
+    before it reads the comment. Numbers without "re-measure before you act on this" turn
+    precision into a trap: the author fixes to a figure that was true when you measured
+    and is wrong when they land it.
 - **Never baseline, never gate-skip, never override** without explicit per-instance
   authorization from Santa. Only *who fixes* changed, not *whether* it gets fixed.
 - **Report BOTH outcomes** — merged and failed — to Santa and on the PR. Santa needs both
