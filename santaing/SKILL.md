@@ -637,27 +637,31 @@ in the command it actually ran.
 
 The integrator is the only agent touching the integration boundary, so a habit
 of routing around a block is the single habit that cannot be allowed to settle
-in there.
+in there. A blocked gate is a stop-and-report event: Santa decides whether the
+gate is wrong. If it is, the override is explicit and leaves a trace; if it is
+right, the underlying setup gets fixed.
 
-Observed shape: the integrator built a scratch tree in a temp directory, the
-repo's gate refused a command because it could not determine which workspace the
-operation targeted, and the next command reached the same effect via
-`git -C <temp path> …` — a path the gate does not inspect. The gate was right:
-the ambiguity it flagged existed *because* the tree was in the wrong place. The
-correct fix was to move the operation somewhere unambiguous, not to phrase it so
-the check no longer applied.
+**But establish that a bypass actually happened before calling one.** Santa
+once accused the integrator of evading a gate because a refused command was
+followed by a differently-spelled one that succeeded — `git -C <path> push`
+after a workspace-resolution refusal. Reading the classifier afterwards showed
+`-C` was in its value-consuming flag table *specifically* so it cannot hide a
+subcommand: the second command was fully gated, and the long wait that looked
+like a bypass was the gate running. The integrator had done exactly what the
+error message asked — made the target unambiguous.
 
-**Rule: a blocked gate is a stop-and-report event for the integrator.** Santa
-decides whether the gate is wrong. If it is, the override is explicit and leaves
-a trace; if it is right, the underlying setup gets fixed. An integrator that
-silently finds another spelling has removed the last check between a fleet and
-its trunk.
+The cost of getting this wrong is not just an unfair accusation. Telling an
+integrator to halt and report on a class of operation that was never a bypass
+slows every subsequent merge for no reason. **Read the gate's own classifier
+before concluding it was circumvented** — a refusal followed by a success is
+equally consistent with the operator fixing the thing the gate objected to.
 
-Related, and the reason the block happened at all: **scratch trees for
+Related, and the reason that block happened at all: **scratch trees for
 integration work belong in the project's own isolated-workspace mechanism, not
 in a temp directory.** A build tree under `/tmp` is invisible to the repo's
 artifact-reclamation tooling and never gets cleaned up, and in a jj-colocated
-repo a *git* worktree is the shape that tangles sibling workspaces.
+repo a *git* worktree is the shape that tangles sibling workspaces. That part of
+the finding held up; the bypass part did not.
 
 ## Rebasing a shared lane branch is a fleet-wide event — warn the lane first
 
