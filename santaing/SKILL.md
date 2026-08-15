@@ -870,36 +870,45 @@ This matters most exactly when it is least visible: a fleet running for hours
 means hundreds of Santa polls, each a chance to snapshot an integrator
 mid-operation.
 
-## A lane that cannot land is the LANE's problem — never stop the queue for it
+## NEVER slow the integration queue for a lane. The branch that diverged carries the rebase burden.
 
-When one lane runs much deeper than the others, it starts reporting conflicts
-every cycle, and the conflicts get worse rather than better. It is tempting to
-read this as the lane being starved by trunk and to freeze the merge queue so it
-can catch up.
+**This is settled software practice, not a judgement call.** Mainline does not
+stop for a long-running refactor. Linux does not freeze the merge window because
+an out-of-tree patchset has grown hard to rebase — the tree moves at its own
+pace, and reconciliation sits entirely with the branch that diverged. That is why
+the standard advice is *upstream early, upstream often*, and why enormous
+out-of-tree patchsets bit-rot instead of the tree waiting for them.
 
-**Do not.** Santa tried exactly that on one fleet and the maintainer reversed it
-within the hour, correctly. Two reasons it fails:
+**The failure mode to recognise in yourself.** One lane runs much deeper than the
+others. It reports conflicts every cycle and the conflicts get *worse*. It is
+tempting to measure trunk's merge rate against the lane's depth, conclude the
+lane is being "starved", and freeze the queue so it can catch up. Santa did
+exactly this on one fleet and the maintainer reversed it immediately and
+emphatically. It is wrong on every axis:
 
-**It stops three lanes to help one.** The other lanes' verified, ready PRs sit
-unmerged, and their branches keep growing — so the freeze manufactures the same
-deep-lane problem everywhere else while solving it nowhere.
+- **It stops N-1 lanes to help one.** Verified, ready PRs sit unmerged while
+  their branches keep growing — so the freeze *manufactures* the same deep-lane
+  problem across the whole fleet while solving it nowhere.
+- **The deep lane is usually a moving target too.** In that case the lane was
+  still authoring new migrations *while* rebasing. Freezing trunk cannot converge
+  a rebase when the branch is also advancing — and trunk was the only end the
+  orchestrator could even control.
+- **It rewards the behaviour that caused it.** A lane that never stops to land
+  learns that the queue will wait for it.
 
-**The lane is usually a moving target too.** The deep lane in that case was still
-authoring new migrations *while* rebasing. Freezing trunk cannot converge a
-rebase when the branch is also advancing; both ends were moving, and only one of
-them was under the orchestrator's control anyway.
-
-**The fix is at the lane, and there are two of them:**
+**The remedy is always at the lane, and it is two things:**
 
 - **The lane freezes ITSELF.** No new substeps, no new commits that are not part
-  of getting the PR mergeable. Rebase, resolve, verify, land, *then* resume
+  of getting the PR mergeable. Rebase, resolve, verify, land — *then* resume
   building. A branch that stops moving converges against a trunk that does not.
-- **Land smaller batches.** Depth is what makes a rebase painful; a lane that
-  opens a PR every few substeps never reaches the state where reconciliation is
-  a project of its own. If a rebase is genuinely large, splitting it — land the
-  uncontroversial majority, leave the conflicted corpus for a small follow-up —
-  beats one enormous PR that keeps missing the window.
+- **Land smaller batches.** Depth is what makes a rebase painful. A lane that
+  opens a PR every few substeps never reaches the state where reconciliation
+  becomes a project of its own. If a rebase is already large, split it: land the
+  uncontroversial majority, leave the conflicted files for a small follow-up.
+  That beats one enormous PR that keeps missing the window.
 
-**Standing rule: the queue never stops for a lane.** A PR that is not mergeable
-waits its turn while everything else lands. Slowing the integrator is never the
-remedy for a lane that cannot keep up.
+**Standing rule, no exceptions: the queue never stops for a lane.** A PR that is
+not mergeable waits its turn while everything else lands. Slowing the integrator
+is never the remedy for a lane that cannot keep up — and if you find yourself
+constructing an argument for why this particular case is special, that argument
+is wrong.
