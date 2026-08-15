@@ -821,3 +821,30 @@ exemption exists for genuine ledger repair, not for a lane's substeps arriving
 ahead of their implementation. So the integrator's check is not "would the gate
 pass this" but "does this carry the work it describes" — those differ exactly
 here, and only the second one is the rule.
+
+## A stale citation and a false tick look identical — only the code tells them apart
+
+A ledger entry ticked with evidence that resolves to nothing has two completely
+different causes and opposite fixes:
+
+- **False tick** — the work never shipped. Fix: untick.
+- **Stale citation** — the work shipped, but the commit it cited was rewritten or
+  dropped, someone later restored the work under a fresh identifier, and nobody
+  walked the ledger to re-point the citation. Fix: re-cite, keep the tick.
+
+From the ledger alone they are indistinguishable, and the instinct — untick,
+because the evidence is bad — silently deletes a true completion record.
+
+**The rule: check the tree, not the ledger.** Does the capability actually exist
+in the code right now? If yes, hunt for the change that really landed it; a
+restore commit usually says so in its own title. If no, untick.
+
+**Why this recurs:** durable change identifiers survive *rebase*, which is what
+they are sold on — but they do not survive *abandonment*. A restore is a new
+change with a new identifier, and nothing walks the ledger to update citations
+pointing at commits that no longer exist. Every rewritten-then-restored piece of
+work leaves one of these behind.
+
+Related: where a gate scans for citation-beside-checkbox, the citation must be on
+the checkbox's own line. A citation in the paragraph below reads correctly to a
+human and is invisible to the scanner.
