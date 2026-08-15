@@ -113,6 +113,11 @@ Brief it once as a **standing role**, not a task. The brief must carry:
   larger than its total, a test count from a run you watched compile. When one appears,
   **suspect the instrument, never the repository.** Impossibility ends the argument;
   a wrong value only starts one about methodology.
+- **Pin the head in the merge call itself, not in a check before it.** Comparing the
+  head and then merging leaves a window; passing the expected revision to the merge API
+  (`gh api ... -f sha=<verified-head>`) makes the platform reject the merge if the branch
+  moved. **Evidence is only valid against the revision it was gathered on**, and standing
+  branches move during verification, not merely before it.
 - **Never squash** — change IDs are the durable identifiers a ledger cites.
 - **Stop rather than resolve** a conflict in any shared bookkeeping file (allow-lists,
   ledgers). Those have no mechanically obvious side: one arm restores retired entries,
