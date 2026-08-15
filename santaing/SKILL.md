@@ -766,3 +766,30 @@ have a gate to refuse.
 trunk and check whether it touches the ledger. When this was run on one fleet of
 three lanes, one lane was ticking correctly and two were not — so it was neither
 "everyone knows" nor "nobody does", and only the diff distinguished them.
+
+## An intermediate integration branch is a second place for work to strand
+
+A tempting lane shape: helpers open PRs against a long-lived phase branch, and
+the phase branch periodically merges to trunk. It looks tidy — one place per
+phase, trunk stays quiet.
+
+What it actually adds is a second landing step that nobody owns. Work merges
+onto the phase branch and stops there. The chain of phase-branch-to-trunk PRs
+runs out without anyone noticing, because each individual merge *succeeded* and
+the queue looks empty. One fleet accumulated fourteen commits this way with
+nothing open to land them; draining it cost a rebase, a full-suite run, and a
+merge, and the pile was only found by measuring the branch against trunk rather
+than reading the PR list.
+
+**Default: helpers branch from trunk and target trunk.** Named feature branches
+per unit of work are fine and good; the intermediate integration branch is the
+part to drop. A phase does not need a branch to be a phase — it has a ledger
+entry and a set of substeps, and those are what track it.
+
+**If a phase branch genuinely is needed** — a long refactor that must land
+atomically, say — then someone owns draining it, and Santa checks its depth
+against trunk on a cadence rather than trusting the PR list. `rev-list --count
+trunk..branch` is the measurement; an empty PR queue is not.
+
+**The moment to change the shape is when the branch is empty.** A drained phase
+branch is a free retarget; a loaded one means rebasing every open child.
