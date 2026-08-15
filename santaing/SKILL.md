@@ -912,3 +912,27 @@ not mergeable waits its turn while everything else lands. Slowing the integrator
 is never the remedy for a lane that cannot keep up — and if you find yourself
 constructing an argument for why this particular case is special, that argument
 is wrong.
+
+## A live goal outranks your messages — to change what a helper does, change the GOAL
+
+Helpers driven by a standing goal will keep executing that goal. A message
+telling them to do something else competes with it and usually loses, because
+the goal re-asserts itself on the next turn while the message is a one-off.
+
+The tell is a helper that acknowledges an instruction and then visibly continues
+the old work — same task list, same in-progress item, no change in what it is
+building. Santa sent one lane three increasingly firm messages to stop building
+and land its PR; the lane kept building, because its goal said in as many words
+*take the next substep, then immediately take the next one, do not stop to ask
+permission*. The instruction was not being ignored — it was being outvoted by
+Santa's own earlier instruction.
+
+**So when the objective changes, replace the goal, not the conversation.** Clear
+the input, set a new goal that states the new objective as the whole objective,
+and let the old one go. Keep the constraints that still apply, but do not leave
+the superseded directive in place hoping a message overrides it.
+
+**And read this as a diagnostic about yourself.** If a helper is not doing what
+you asked twice, check what you told it to do *persistently* before concluding
+it is misbehaving. The conflict is usually between two of your own instructions,
+and only one of them is still visible to you.
