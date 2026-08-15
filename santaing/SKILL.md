@@ -848,3 +848,24 @@ work leaves one of these behind.
 Related: where a gate scans for citation-beside-checkbox, the citation must be on
 the checkbox's own line. A citation in the paragraph below reads correctly to a
 human and is invisible to the scanner.
+
+## Santa's status checks must be read-only — VCS status commands often are not
+
+Santa is told not to touch the canonical checkout, and it is easy to believe a
+status check honours that. It frequently does not: in jj, ordinary commands
+snapshot the working copy as a side effect, so a Santa polling `jj git fetch` in
+the integrator's checkout every few minutes has been *mutating the integrator's
+state* on every poll — including snapshotting whatever it had half-finished.
+
+The symptom that surfaces it is a stale-working-copy error appearing in Santa's
+own output, which reads like the integrator's problem and is actually Santa's.
+
+**Use commands that only read.** Plain `git fetch`, `git rev-list --count`,
+`git ls-remote`, and the forge CLI all answer the orchestration questions —
+what is trunk, how deep is each lane, what is open — without touching the
+working copy. Reserve the VCS's own porcelain for the agents that own a
+checkout.
+
+This matters most exactly when it is least visible: a fleet running for hours
+means hundreds of Santa polls, each a chance to snapshot an integrator
+mid-operation.
