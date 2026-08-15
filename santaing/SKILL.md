@@ -976,3 +976,32 @@ and processes input only at turn boundaries. With turns running twenty-plus
 minutes, direction lands late — so sending three increasingly firm messages just
 builds a deeper queue. Check whether input is queued before concluding anything
 about compliance.
+
+## The integrator's queue is stale by construction — make re-listing a command, not a habit
+
+An integrator gates one PR at a time, and a full gate takes fifteen to twenty
+minutes. Meanwhile every lane keeps pushing. So whatever the integrator believed
+about the queue when it started is wrong by the time it finishes — not
+occasionally, but *every single cycle*.
+
+The failure has one shape and it repeats: the integrator checks the PR it was
+already thinking about, finds it blocked or conflicting, and concludes "no merge
+work available" while two other PRs sit open. One fleet's integrator did this
+five separate times in a night, each time after being told to re-list.
+
+**Telling it to re-list does not work, because the whole problem is that it
+believes it already knows.** Replace the habit with a literal command it runs as
+the first action of every cycle, before any reasoning about what to do:
+
+```
+gh pr list --repo <owner>/<repo> --json number,headRefName,mergeable \
+  --jq '.[]|"#\(.number) \(.headRefName) \(.mergeable)"'
+```
+
+Then work that output top to bottom. The instruction is *do not carry a queue in
+your head between cycles* — and the reason, which makes it stick, is that four
+lanes push while it gates one PR.
+
+**Santa's tell:** an integrator reporting "nothing to do" while `gh pr list`
+shows open PRs. Check the real queue yourself before accepting an idle report;
+idle is sometimes correct, but "idle because I did not look" is the common case.
