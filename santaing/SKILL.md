@@ -608,3 +608,27 @@ helpers out on X"* / *"orchestrate the codexes to build Y"*:
 
 Report progress as a fleet status: per-helper (session, slice, state: briefed /
 pursuing / done / stuck / integrated) plus what's on `<TARGET>` and what's left.
+
+## Judge a long job from its ARTIFACT, not its process table
+
+When you hold a fleet idle waiting on one long job, the temptation is to confirm
+progress the cheap way: `pgrep` counts, a live compiler at 99% CPU, a process
+that is 4 seconds old. **All of that proves the machine is busy. None of it
+proves the command is doing what you meant.**
+
+A regen once ran a full hour under a held quiet window and produced nothing —
+the helper had written `2>&1 > file`, which sends stderr to the terminal and
+only stdout to the file, so the real error was discarded at second one. Santa
+and the helper both watched process liveness the whole hour and both saw a
+healthy-looking run.
+
+**Read the output artifact early — minutes in, not at the end — and confirm it
+contains what you expect.** An empty or malformed capture file is the signal a
+process count structurally cannot give you. This is the same rule as "only an
+exit code is authoritative", extended: while a job is still running, the
+artifact is the only honest progress signal available.
+
+Corollary for the redirect itself: `> file 2>&1` captures both streams;
+`2>&1 > file` captures only stdout and throws the errors at your terminal.
+When you hand a helper a long backgrounded command, check the redirect order
+in the command it actually ran.
