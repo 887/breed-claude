@@ -767,29 +767,29 @@ trunk and check whether it touches the ledger. When this was run on one fleet of
 three lanes, one lane was ticking correctly and two were not — so it was neither
 "everyone knows" nor "nobody does", and only the diff distinguished them.
 
-## An intermediate integration branch is a second place for work to strand
+## A lane branch needs a DRAIN, not abolishing
 
-A tempting lane shape: helpers open PRs against a long-lived phase branch, and
-the phase branch periodically merges to trunk. It looks tidy — one place per
-phase, trunk stays quiet.
+The lane model — one standing branch per phase, one open PR at a time from it to
+trunk — is a good shape. Work accumulates coherently, the phase has one address,
+and the integrator sees one queue item per lane instead of one per unit.
 
-What it actually adds is a second landing step that nobody owns. Work merges
-onto the phase branch and stops there. The chain of phase-branch-to-trunk PRs
-runs out without anyone noticing, because each individual merge *succeeded* and
-the queue looks empty. One fleet accumulated fourteen commits this way with
-nothing open to land them; draining it cost a rebase, a full-suite run, and a
-merge, and the pile was only found by measuring the branch against trunk rather
-than reading the PR list.
+Its failure mode is not the branch. It is a lane that **accumulates with no drain
+PR open**. One fleet ran a lane fourteen commits deep before anyone noticed, and
+the reason nobody noticed is that the failure is invisible where you look for
+work: every individual merge onto the lane *succeeded*, and the PR list showed
+nothing waiting. An empty queue and a stalled lane look identical.
 
-**Default: helpers branch from trunk and target trunk.** Named feature branches
-per unit of work are fine and good; the intermediate integration branch is the
-part to drop. A phase does not need a branch to be a phase — it has a ledger
-entry and a set of substeps, and those are what track it.
+**Santa diagnosed that as the lane model being wrong and told the lane to target
+trunk directly. That was the wrong lesson and it contradicted the maintainer's
+explicit instruction** — other lanes were running the same model without trouble.
+Removing a structure because one instance of it went unmaintained is a reflex to
+catch in yourself.
 
-**If a phase branch genuinely is needed** — a long refactor that must land
-atomically, say — then someone owns draining it, and Santa checks its depth
-against trunk on a cadence rather than trusting the PR list. `rev-list --count
-trunk..branch` is the measurement; an empty PR queue is not.
+**The actual practice:** measure lane depth on a cadence, not from the PR list.
+`rev-list --count trunk..<lane>` per active lane. A lane more than a few commits
+deep with nothing open to land it is work that has stopped moving, and it is
+Santa's job to notice — the lane cannot see it (it is busy building) and the
+integrator cannot see it (its queue is empty).
 
-**The moment to change the shape is when the branch is empty.** A drained phase
-branch is a free retarget; a loaded one means rebasing every open child.
+Make this an explicit check when the merge queue goes quiet. A quiet queue is
+exactly when a stranded lane is most likely, and exactly when nobody is looking.
