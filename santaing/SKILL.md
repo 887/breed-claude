@@ -936,3 +936,43 @@ the superseded directive in place hoping a message overrides it.
 you asked twice, check what you told it to do *persistently* before concluding
 it is misbehaving. The conflict is usually between two of your own instructions,
 and only one of them is still visible to you.
+
+## Slash commands sent to a Claude helper MUST use bracketed paste, or they arrive mangled
+
+Claude's TUI pops a slash-command picker the moment a `/` is typed, and that
+picker **consumes the next several keystrokes as filter input**. So a goal sent
+with `tmux send-keys -l '/goal Do the thing'` arrives as `l Do the thing` — the
+`/goa` is eaten, and what lands is a plain message that happens to start with a
+stray letter.
+
+**This fails silently and looks like disobedience.** The helper receives a
+perfectly reasonable-sounding message, acts on it once, and then reverts to its
+*previous* goal on the next turn — because no new goal was ever set. Santa spent
+an hour concluding a lane was ignoring instructions, then found the queued text
+began `l Land PR #622` and understood that every `/goal` sent that session had
+been silently downgraded to a message.
+
+**Always send a slash command as bracketed paste:**
+
+```sh
+printf '%s' '/goal …' | tmux load-buffer -b g -
+tmux paste-buffer -p -b g -t <session>
+tmux delete-buffer -b g
+sleep 1.5
+tmux send-keys -t <session> Enter
+```
+
+`paste-buffer -p` wraps the text in bracketed-paste markers, which the TUI
+treats as paste data rather than routing through the picker, so the whole string
+lands as one input line.
+
+**Then verify it registered.** The pane echoes `Goal set: …` on success. If you
+see your text with a leading fragment instead, the picker ate it. A goal you
+believe is active but is not is worse than no goal: the helper keeps executing
+something you replaced hours ago, and every message you send fights it.
+
+**Related timing trap:** a busy helper shows `Press up to edit queued messages`
+and processes input only at turn boundaries. With turns running twenty-plus
+minutes, direction lands late — so sending three increasingly firm messages just
+builds a deeper queue. Check whether input is queued before concluding anything
+about compliance.
