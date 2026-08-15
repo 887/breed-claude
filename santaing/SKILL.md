@@ -113,6 +113,11 @@ Brief it once as a **standing role**, not a task. The brief must carry:
   larger than its total, a test count from a run you watched compile. When one appears,
   **suspect the instrument, never the repository.** Impossibility ends the argument;
   a wrong value only starts one about methodology.
+- **The freeze never blocks a fix.** A frozen lane still owes pushes that make its
+  branch verifiable — a rebase, a conflict resolution, a finding the integrator raised.
+  The freeze protects verification **in progress**, nothing else; if the branch cannot be
+  verified until the lane pushes, unfreeze, let it push, refreeze. This collides on first
+  contact otherwise, and the collision looks like the lane being obstinate.
 - **Check mergeability BEFORE spending verification.** A conflicting branch cannot be
   verified at all, so a full contract run against it is wasted from the first command.
   And the freeze below does not apply to it — there is nothing to protect while it cannot
