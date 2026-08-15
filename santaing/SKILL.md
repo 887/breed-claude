@@ -185,6 +185,14 @@ phases build on each other, this matters twice over:
 the permanent-lane arrangement compound: the author sees the rule and stops reproducing
 it, instead of an integrator silently absorbing the same finding repeatedly.
 
+**Re-arm the watcher whenever the fleet changes, and check what it actually counts.**
+Replacing an agent, adding a lane, or losing one to a quota limit leaves the monitor
+watching the old set. A watcher that counts *sessions* rather than *work* reports full
+health while pointed at dead panes — a killed agent's tmux session still exists, so
+"N/N alive" stays true while the lanes that replaced it are unwatched. Restate the
+session list on every fleet change, and confirm the names you passed are the names
+that are working.
+
 **Watch for silent model changes and memory pressure — both look like healthy work.**
 A tmux agent can fall back to a smaller model mid-run; the footer is the only place it
 shows. An integrator on a 200k window carrying 400k of context keeps reasoning fluently
