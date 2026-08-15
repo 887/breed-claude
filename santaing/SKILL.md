@@ -870,32 +870,36 @@ This matters most exactly when it is least visible: a fleet running for hours
 means hundreds of Santa polls, each a chance to snapshot an integrator
 mid-operation.
 
-## A deep lane can be STARVED by trunk, and it looks exactly like a lane that cannot rebase
+## A lane that cannot land is the LANE's problem — never stop the queue for it
 
-When one lane runs much deeper than the others, watch for this: it finishes a
-rebase, and before it can gate and merge, another lane's PR lands and invalidates
-it. Repeat. The lane reports conflicts every cycle and the conflicts get *worse*
-— not because its work is degrading, but because trunk keeps moving.
+When one lane runs much deeper than the others, it starts reporting conflicts
+every cycle, and the conflicts get worse rather than better. It is tempting to
+read this as the lane being starved by trunk and to freeze the merge queue so it
+can catch up.
 
-From the outside this is indistinguishable from a lane that is bad at rebasing,
-and the instinct is to push the lane harder. That is exactly wrong: no amount of
-skill out-runs a target that moves faster than a rebase-plus-gate cycle takes.
+**Do not.** Santa tried exactly that on one fleet and the maintainer reversed it
+within the hour, correctly. Two reasons it fails:
 
-**Diagnose it by measuring the race, not the lane.** Trunk's merge rate over a
-window, against the lane's depth and — the number that actually matters — how far
-*behind* trunk it is. One fleet had a lane 41 commits ahead and 51 behind while
-trunk took 4 merges in 90 minutes; its conflict count grew from 3 files to 5
-during a single rebase attempt.
+**It stops three lanes to help one.** The other lanes' verified, ready PRs sit
+unmerged, and their branches keep growing — so the freeze manufactures the same
+deep-lane problem everywhere else while solving it nowhere.
 
-**The fix is a scheduling decision only the orchestrator can make: freeze the
-merge queue until the deep lane lands.** Other PRs still get verified fully and
-held ready — the freeze is on merging, not on work. A few PRs waiting an hour is
-cheap against a large body of work that can never land at all.
+**The lane is usually a moving target too.** The deep lane in that case was still
+authoring new migrations *while* rebasing. Freezing trunk cannot converge a
+rebase when the branch is also advancing; both ends were moving, and only one of
+them was under the orchestrator's control anyway.
 
-**Say explicitly that the starvation was the orchestrator's failure, not the
-lane's.** A lane repeatedly told to rebase, that keeps hitting worse conflicts,
-will reasonably conclude it is doing something wrong.
+**The fix is at the lane, and there are two of them:**
 
-**And ask for the distinguishing signal on the way out:** if the lane still
-conflicts against a target that is genuinely holding still, that is real content
-conflict rather than starvation, and it wants a different answer.
+- **The lane freezes ITSELF.** No new substeps, no new commits that are not part
+  of getting the PR mergeable. Rebase, resolve, verify, land, *then* resume
+  building. A branch that stops moving converges against a trunk that does not.
+- **Land smaller batches.** Depth is what makes a rebase painful; a lane that
+  opens a PR every few substeps never reaches the state where reconciliation is
+  a project of its own. If a rebase is genuinely large, splitting it — land the
+  uncontroversial majority, leave the conflicted corpus for a small follow-up —
+  beats one enormous PR that keeps missing the window.
+
+**Standing rule: the queue never stops for a lane.** A PR that is not mergeable
+waits its turn while everything else lands. Slowing the integrator is never the
+remedy for a lane that cannot keep up.
