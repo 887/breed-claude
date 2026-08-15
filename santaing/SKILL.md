@@ -704,3 +704,30 @@ exact lines, the regeneration command, and confirmation that the landing is
 inside an existing gate exception rather than needing an override). A deferral
 that survives after the work has been reduced to five minutes of typing is a
 different conversation from one made while the work still looks open-ended.
+
+## Landing a stack has a second half: retarget the child when the parent merges
+
+A stacked PR is based on its parent's branch. When the parent merges, that
+branch becomes subsumed by trunk — its tip *is* a commit now in trunk — and the
+child PR is left pointing at a dead branch. Merging it as-is lands the work on
+that branch instead of trunk, where it quietly does nothing.
+
+This is not a mis-basing error. It is what *success* looks like partway through
+a stack, and it will happen once per level on every stack the fleet builds.
+
+**So a "report mis-based PRs to me" rule needs an explicit carve-out for it**,
+or the integrator stops on every stack level and waits for a decision that is
+always the same. Distinguish the two cases by cause:
+
+- **Parent merged, base now subsumed** → retarget to trunk and carry on. Verify
+  first that the base branch really is an ancestor of trunk and that a merge
+  simulation against current trunk is clean; then the retarget changes *where*
+  the work lands, not *what* lands.
+- **Base wrong for any other reason** — never an ancestor of trunk, a dirty
+  merge simulation, a branch nobody recognises → that is a real defect and goes
+  back to the lane that owns it, because re-parenting would hide the mistake
+  from the person who needs to learn about it.
+
+Pre-authorize the whole chain when you authorize the first one. A three-deep
+stack otherwise costs three identical round-trips through Santa, each one
+blocking the merge queue behind it.
