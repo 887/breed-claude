@@ -113,6 +113,12 @@ Brief it once as a **standing role**, not a task. The brief must carry:
   larger than its total, a test count from a run you watched compile. When one appears,
   **suspect the instrument, never the repository.** Impossibility ends the argument;
   a wrong value only starts one about methodology.
+- **Freeze BEFORE the integrator starts, not alongside it.** The handshake has a race:
+  a lane told "keep working locally" while a verification is already running may have
+  pushed seconds earlier, and the integrator then discards evidence gathered against a
+  head that moved. Send the freeze first, confirm the lane acknowledged it, and only
+  then hand the PR over. When it races anyway, say plainly that the timing was yours —
+  the lane followed the instruction it had.
 - **The freeze never blocks a fix.** A frozen lane still owes pushes that make its
   branch verifiable — a rebase, a conflict resolution, a finding the integrator raised.
   The freeze protects verification **in progress**, nothing else; if the branch cannot be
