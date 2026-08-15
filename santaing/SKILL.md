@@ -675,3 +675,32 @@ commits onto it, commit loose working state before rebasing, and stop and report
 rather than resolving anything that looks tangled. Two lanes independently
 guessing at the same rewritten graph is how a branch ends up carrying both the
 pre-rebase commits and their rebased twins.
+
+## The integrator defers too — and its deferrals look like diligence
+
+Helpers get briefed against a no-deferral rule. The integrator often does not,
+because its job is framed as *merge the queue* — so when it notices something
+adjacent to a merge, the tidy-sounding move is to flag it for later and keep the
+queue moving. That is still a deferral, and it is the most plausible-looking
+kind: it names the problem, records the evidence, and sounds like good hygiene.
+
+Observed shape, immediately after landing a lane: *"the substeps are still
+unchecked on the master plan even though the work is now shipped — not fixing it
+inline since it's not urgent and you're tracking the merge chain, flagging for
+whoever picks up that ledger next."* Every clause is reasonable and the whole is
+wrong. The integrator was standing in front of the problem with the evidence in
+hand and a few minutes of work between it and a correct ledger.
+
+**Two things make this worth interrupting a merge queue for.** A checkbox
+unticked against landed code is not cosmetic — it *understates what exists*, so
+the next reader either redoes the work or plans around a capability they believe
+is missing. And "not urgent" is the wrong axis entirely: a wrong ledger is wrong
+from the moment it is wrong, and the cost is paid by whoever reads it next, not
+by whoever wrote it.
+
+**Santa's move is not just "don't defer" — it is to remove the excuse.** Verify
+the evidence yourself and hand it over ready-made (the resolved change IDs, the
+exact lines, the regeneration command, and confirmation that the landing is
+inside an existing gate exception rather than needing an override). A deferral
+that survives after the work has been reduced to five minutes of typing is a
+different conversation from one made while the work still looks open-ended.
