@@ -731,3 +731,38 @@ always the same. Distinguish the two cases by cause:
 Pre-authorize the whole chain when you authorize the first one. A three-deep
 stack otherwise costs three identical round-trips through Santa, each one
 blocking the merge queue behind it.
+
+## The implementer ticks the ledger, on the branch, in the landing change
+
+A project whose ledger is the source of truth for "what is done" usually has a
+rule that the owner ticks the box with its evidence *as the work lands*. That
+phrasing is ambiguous in the worst possible way: it reads equally as "in the
+change that lands it" and "once it has landed". Fleets drift to the second
+reading, because from inside a lane the tick feels like paperwork that follows
+shipping rather than part of it.
+
+The result is a window — sometimes long — where trunk carries the code and the
+ledger says the work does not exist. Anyone reading the ledger in that window
+either redoes the work or plans around a capability they believe is missing.
+Worse, the correction afterwards is a **ledger change arriving without the code
+that justifies it**, which is exactly the plan-only landing most such projects
+have a gate to refuse.
+
+**Three things make this stick:**
+
+- **Say "in the change that lands it, on the branch, before merge."** Never "as
+  it lands". The ambiguity is the whole defect.
+- **Kill the not-yet-known-evidence excuse explicitly.** Where the evidence is a
+  VCS identifier that is stable from creation — a jj change ID, say — the
+  implementer can read it the moment they commit and tick in a follow-up commit
+  on the same branch. If the fleet believes the identifier only exists after the
+  merge, they will defer the tick every time and be reasonable about it.
+- **Make it a merge precondition, and have the integrator bounce rather than
+  fix.** A PR implementing a carved substep without its tick goes back to the
+  lane. If the integrator patches it, the lane never learns, and the integrator
+  becomes a permanent ledger-repair service.
+
+**Audit the fleet rather than assuming.** Diff each open PR's branch against
+trunk and check whether it touches the ledger. When this was run on one fleet of
+three lanes, one lane was ticking correctly and two were not — so it was neither
+"everyone knows" nor "nobody does", and only the diff distinguished them.
