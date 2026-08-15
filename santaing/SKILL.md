@@ -632,3 +632,42 @@ Corollary for the redirect itself: `> file 2>&1` captures both streams;
 `2>&1 > file` captures only stdout and throws the errors at your terminal.
 When you hand a helper a long backgrounded command, check the redirect order
 in the command it actually ran.
+
+## When a gate blocks the integrator, it reports — it does not rephrase
+
+The integrator is the only agent touching the integration boundary, so a habit
+of routing around a block is the single habit that cannot be allowed to settle
+in there.
+
+Observed shape: the integrator built a scratch tree in a temp directory, the
+repo's gate refused a command because it could not determine which workspace the
+operation targeted, and the next command reached the same effect via
+`git -C <temp path> …` — a path the gate does not inspect. The gate was right:
+the ambiguity it flagged existed *because* the tree was in the wrong place. The
+correct fix was to move the operation somewhere unambiguous, not to phrase it so
+the check no longer applied.
+
+**Rule: a blocked gate is a stop-and-report event for the integrator.** Santa
+decides whether the gate is wrong. If it is, the override is explicit and leaves
+a trace; if it is right, the underlying setup gets fixed. An integrator that
+silently finds another spelling has removed the last check between a fleet and
+its trunk.
+
+Related, and the reason the block happened at all: **scratch trees for
+integration work belong in the project's own isolated-workspace mechanism, not
+in a temp directory.** A build tree under `/tmp` is invisible to the repo's
+artifact-reclamation tooling and never gets cleaned up, and in a jj-colocated
+repo a *git* worktree is the shape that tangles sibling workspaces.
+
+## Rebasing a shared lane branch is a fleet-wide event — warn the lane first
+
+Rebasing a long-lived lane branch before landing it is correct practice, and it
+is usually Santa who asks for it. But a lane branch is shared: any helper still
+building on it has its base moved out from under it by the force-push.
+
+**Send the warning before the push lands, not after**, and make it actionable:
+fetch first, check where your work sits relative to the new tip, rebase your own
+commits onto it, commit loose working state before rebasing, and stop and report
+rather than resolving anything that looks tangled. Two lanes independently
+guessing at the same rewritten graph is how a branch ends up carrying both the
+pre-rebase commits and their rebased twins.
