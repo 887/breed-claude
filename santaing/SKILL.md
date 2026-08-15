@@ -869,3 +869,33 @@ checkout.
 This matters most exactly when it is least visible: a fleet running for hours
 means hundreds of Santa polls, each a chance to snapshot an integrator
 mid-operation.
+
+## A deep lane can be STARVED by trunk, and it looks exactly like a lane that cannot rebase
+
+When one lane runs much deeper than the others, watch for this: it finishes a
+rebase, and before it can gate and merge, another lane's PR lands and invalidates
+it. Repeat. The lane reports conflicts every cycle and the conflicts get *worse*
+— not because its work is degrading, but because trunk keeps moving.
+
+From the outside this is indistinguishable from a lane that is bad at rebasing,
+and the instinct is to push the lane harder. That is exactly wrong: no amount of
+skill out-runs a target that moves faster than a rebase-plus-gate cycle takes.
+
+**Diagnose it by measuring the race, not the lane.** Trunk's merge rate over a
+window, against the lane's depth and — the number that actually matters — how far
+*behind* trunk it is. One fleet had a lane 41 commits ahead and 51 behind while
+trunk took 4 merges in 90 minutes; its conflict count grew from 3 files to 5
+during a single rebase attempt.
+
+**The fix is a scheduling decision only the orchestrator can make: freeze the
+merge queue until the deep lane lands.** Other PRs still get verified fully and
+held ready — the freeze is on merging, not on work. A few PRs waiting an hour is
+cheap against a large body of work that can never land at all.
+
+**Say explicitly that the starvation was the orchestrator's failure, not the
+lane's.** A lane repeatedly told to rebase, that keeps hitting worse conflicts,
+will reasonably conclude it is doing something wrong.
+
+**And ask for the distinguishing signal on the way out:** if the lane still
+conflicts against a target that is genuinely holding still, that is real content
+conflict rather than starvation, and it wants a different answer.
