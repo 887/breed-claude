@@ -150,7 +150,27 @@ while true; do
         # quote-escaping into the file literally, which `bash -n` accepts and which
         # silently made the strip a NO-OP — the bug survived its own fix, and only a
         # behavioural test on a padded fixture caught it.
-        pane=$(tmux capture-pane -pt "$s" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -25)
+        # STRIP THE INPUT BOX BEFORE CLASSIFYING. Claude lanes render a prompt
+        # line beginning with the box-drawing chevron, and Claude fills it with a
+        # SUGGESTED next input — preview text the model wrote, not something a
+        # human typed. It appears precisely when the lane is idle awaiting input,
+        # and its content is arbitrary model prose: a suggestion like "esc to
+        # interrupt that" or "1 shell left running" collides with the WORKING
+        # vocabulary and votes the lane working when it is stopped. Codex panes
+        # have no equivalent, so this is Claude-only and costs those lanes nothing.
+        #
+        # It also misleads a HUMAN reading the pane: preview text is easily taken
+        # for an unsent draft, which reads as "someone typed this and it did not
+        # send" rather than "this lane finished its turn and stopped". Santa made
+        # exactly that misdiagnosis before this strip existed.
+        #
+        # The pattern carries the chevron LITERALLY. Written as an escape
+        # (backslash-x-e-2 ...) inside a single-quoted grep pattern it is taken
+        # as those characters, not the byte sequence, so the strip silently
+        # matches nothing while `bash -n` reports the file fine. That exact
+        # no-op shipped here once already. Verify this line behaviourally
+        # against a fixture containing a chevron row, never by syntax check.
+        pane=$(tmux capture-pane -pt "$s" 2>/dev/null | grep -v '^[[:space:]]*$' | grep -v '^[[:space:]]*❯' | tail -25)
 
         # AN EMPTY CAPTURE IS UNKNOWN, NOT IDLE. `tmux capture-pane` can return
         # nothing while a pane is being redrawn heavily — codex3 prints process
