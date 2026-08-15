@@ -124,6 +124,12 @@ Brief it once as a **standing role**, not a task. The brief must carry:
   The freeze protects verification **in progress**, nothing else; if the branch cannot be
   verified until the lane pushes, unfreeze, let it push, refreeze. This collides on first
   contact otherwise, and the collision looks like the lane being obstinate.
+- **Tell a lane to rebase EARLY, not at merge time.** A long-lived branch drifts behind
+  trunk while it works, and the cost is not the conflict — it is that every number the
+  lane measured (floors, counts, ledger figures) describes a tree that no longer exists,
+  and every check it ran was against the old base. Merging such a branch can silently
+  carry an old ceiling forward and re-permit retired debt. Watch the fork distance and
+  say so while the lane is still working; rebasing at merge time means verifying twice.
 - **Check mergeability BEFORE spending verification.** A conflicting branch cannot be
   verified at all, so a full contract run against it is wasted from the first command.
   And the freeze below does not apply to it — there is nothing to protect while it cannot
