@@ -113,6 +113,13 @@ Brief it once as a **standing role**, not a task. The brief must carry:
   larger than its total, a test count from a run you watched compile. When one appears,
   **suspect the instrument, never the repository.** Impossibility ends the argument;
   a wrong value only starts one about methodology.
+- **A branch under verification is frozen — tell the lane, do not just hope.** A lane
+  that pushes while the integrator is verifying its PR invalidates every result gathered
+  so far, and the only remedy is to discard the work and re-run it. The lane is not doing
+  anything wrong; nothing tells it the integrator started. Santa announces "your branch is
+  under verification, hold" and "merged, push freely" as an explicit handshake. This is
+  the cheapest of the three head-movement defences and it prevents the problem the other
+  two only detect.
 - **Pin the head in the merge call itself, not in a check before it.** Comparing the
   head and then merging leaves a window; passing the expected revision to the merge API
   (`gh api ... -f sha=<verified-head>`) makes the platform reject the merge if the branch
