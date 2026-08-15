@@ -793,3 +793,31 @@ integrator cannot see it (its queue is empty).
 
 Make this an explicit check when the merge queue goes quiet. A quiet queue is
 exactly when a stranded lane is most likely, and exactly when nobody is looking.
+
+## Only the phase reservation lands ahead of the work — substeps and ticks ride the branch
+
+A ledger that tracks work has two kinds of entry, and they land at different
+times. **The reservation** — the phase's row and stanza, claiming the number and
+saying what it is for — legitimately lands on trunk before any code exists; that
+is what stops two lanes claiming the same phase. **Everything else** — new
+substeps, and the ticks against them — rides the branch and merges with the code
+it describes.
+
+Santa broke this by asking a lane to "mirror the substeps onto the ledger" as its
+next unit of work. Framed that way it sounds like a deliverable, and the lane
+correctly produced a standalone docs-only PR. But a PR carrying only new ledger
+boxes claims structure for work that has not arrived, and merging it is the
+plan-only landing most such projects refuse.
+
+**The lane model already solves this if you let it.** The lane has a standing
+branch and one open PR; new substeps go on that branch as unchecked boxes, the
+lane keeps building on the same branch, each tranche ticks the boxes it actually
+finishes, and the whole thing merges as one coherent unit — ledger and code
+together, unable to drift.
+
+**Watch for the gate being technically satisfied.** A plan-only landing gate
+often exempts "adds only unchecked boxes" as a legitimate truth-correction. That
+exemption exists for genuine ledger repair, not for a lane's substeps arriving
+ahead of their implementation. So the integrator's check is not "would the gate
+pass this" but "does this carry the work it describes" — those differ exactly
+here, and only the second one is the rule.
