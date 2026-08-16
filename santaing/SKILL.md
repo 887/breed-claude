@@ -1089,3 +1089,30 @@ predictable — the ledger, the allow-lists, the generated inventories. Name the
 explicitly at briefing time and attach this rule to them, rather than waiting
 for a lane to discover it. And when a lane reports "I fixed my rebase by
 restoring X", ask what else was in X.
+
+## A merged PR's branch is DONE — pushing to it strands the commit invisibly
+
+After a PR merges, its branch still exists and still accepts pushes. A helper
+that adds "one more small thing" to that branch produces a commit with **no path
+to trunk**: the PR is closed, nothing will carry it, and the push succeeded so
+nothing looks wrong from the lane's side.
+
+One fleet lost a documentation commit this way — and the commit being stranded
+was the one recording a *different* data-loss trap. Both errors have the same
+root: acting on a stale belief about the state of a branch.
+
+**The rule for helpers: once your PR merges, that branch is finished forever.**
+New work goes on a new branch with a new PR, or onto whatever branch you are
+currently working. Never push to a merged branch, even for a one-line follow-up.
+
+**Santa's detection, because the lane cannot see it:**
+
+```
+git rev-list --count trunk..<branch>          # commits not in trunk
+git merge-base --is-ancestor <branch> trunk   # fails => something is stranded
+```
+
+Run it over branches whose PRs recently merged, not just active lanes. The
+signal a helper gives you is a report mentioning a PR number you know has
+already landed — "pushed to #672" when #672 merged an hour ago is the tell, and
+it is worth checking every time rather than assuming they meant a new PR.
