@@ -1297,3 +1297,31 @@ instruction emptied it.
 hundred lines onto current trunk is often cheaper and less error-prone than
 reconciling a hundred-plus commits of history that nothing in the change depends
 on.
+
+## Prove a diff is live before trusting an empty one
+
+`git diff <trunk> <ref>` returning nothing reads as "these are identical" and is
+acted on with total confidence. It can also mean the invocation was wrong — a ref
+that silently resolved to something unexpected, a path that no longer exists, a
+comparison that never ran.
+
+One lane assessing an old PR got **empty diffs for all four files**, which would
+have supported the conclusion "everything is superseded, nothing to do". The raw
+byte sizes of those files differed by up to 1.4MB. It caught this by checking
+sizes as a positive control, then redid every comparison by extracting blobs
+directly (`git show <ref>:<path>` piped to `diff`) and found two hunks
+superseded, one still needed, and two files entirely new.
+
+**A shallower assessment would have been confidently, completely wrong** — and
+would have closed a PR whose surviving work nobody would have noticed missing.
+
+**The rule is the same one that applies to any empty search, extended to the
+tools you trust most:** before recording an absence, prove the mechanism can
+detect a presence. For a diff, compare something you know differs — file size,
+a known-changed line, a control file. For a grep, run it against a known-present
+case. The tooling being reputable is not evidence; the check is.
+
+**Santa's angle:** an agent reporting "no differences", "nothing found", or
+"already superseded" across *several* items at once is the shape to question.
+One empty result is plausible; a uniform sweep of them usually means the
+instrument, not the world.
