@@ -1143,3 +1143,31 @@ to new work.
 **Give them a threshold, not just an instruction:** more than two branches in
 flight means stop and land. A number they can check themselves survives longer
 than a judgement they have to make while deep in something else.
+
+## ONE PUSH PER PR — the only branch-freeze rule a lane can enforce without Santa
+
+A lane that keeps pushing to its open PR while the integrator gates it destroys
+the gate run, every time. Three lanes did this in one night on one fleet, each
+costing a full re-verification while other PRs queued behind.
+
+**Two rules that do not work, and why:**
+
+- *"Freeze the branch once handed over."* The lane cannot tell when the
+  integrator starts gating, so it either freezes too early (idling) or not at
+  all.
+- *"Push freely; freeze when Santa says."* A gate run is fifteen to twenty
+  minutes and Santa's poll cycle is ten, so the notice reliably arrives after
+  the run is already lost. Santa is structurally too slow to be in this loop.
+
+**The rule that works: one push per PR.** Push the batch, leave the branch
+alone, accumulate the next batch locally, and push it after the PR merges — onto
+the next PR. A lane always knows whether it has already pushed to the branch it
+is on, so it needs no signal from anyone.
+
+**The trade is deliberate and desirable**: more, smaller PRs rather than fewer
+that keep growing. That is the same direction as every other cadence rule, and
+it is what prevents a lane reaching the depth where a rebase becomes a project
+of its own.
+
+**Santa's residual job** is only to say when a PR has merged, which is cheap and
+already part of the status sweep.
