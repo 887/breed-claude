@@ -1116,3 +1116,30 @@ Run it over branches whose PRs recently merged, not just active lanes. The
 signal a helper gives you is a report mentioning a PR number you know has
 already landed — "pushed to #672" when #672 merged an hour ago is the tell, and
 it is worth checking every time rather than assuming they meant a new PR.
+
+## Count each lane's IN-FLIGHT branches — more than two is a stall forming
+
+A productive lane will happily accumulate branches: one PR conflicting after
+trunk moved, another awaiting a rebase, a stray commit on a merged branch, and a
+fresh branch for whatever it is building now. Each one individually looks fine.
+Together they are an evening quietly not landing.
+
+One lane reached four: two conflicting PRs carrying real, ticked substeps, one
+stranded commit with no PR at all, and a new branch it had just started. From
+inside the lane nothing was wrong — it was busy and productive the whole time.
+
+**Santa counts branches per lane, because the lane counts only the one it is in.**
+
+```
+for b in <lane's branches>; do git rev-list --count trunk..$b; done
+```
+
+**The ordering rule to give them: finish before starting.** Work that is nearly
+landed is worth more than work that is nearly started, because merging is what
+takes it out of risk. So clear the backlog cheapest-first — recover any stranded
+commit, rebase the smallest conflicting PR, then the next — and only then return
+to new work.
+
+**Give them a threshold, not just an instruction:** more than two branches in
+flight means stop and land. A number they can check themselves survives longer
+than a judgement they have to make while deep in something else.
