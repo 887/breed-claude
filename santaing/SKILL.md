@@ -1171,3 +1171,29 @@ of its own.
 
 **Santa's residual job** is only to say when a PR has merged, which is cheap and
 already part of the status sweep.
+
+## "Hold your push" reads as "stop working" — say both halves every time
+
+A lane told to hold its push will often stop entirely. Two lanes on one fleet
+did it within an hour of each other, both reporting the hold correctly and then
+sitting idle for twenty-plus minutes.
+
+It is not a comprehension failure, it is an under-specified instruction. "Do not
+push" names the thing to stop and says nothing about what continues, and the
+cautious reading of an unnamed remainder is to stop that too.
+
+**Always state both halves, explicitly:**
+
+```
+HOLD = do not push to that branch
+KEEP = keep taking work, committing locally, running scoped checks
+```
+
+And give the reason, because it makes the shape obvious: the rule exists to
+spend **one gate run per batch instead of three**, not to park a lane while the
+integrator works. A lane that idles during every hold costs more than the
+duplicated gate runs the rule was written to prevent.
+
+**Santa's tell:** a lane whose last message correctly acknowledges the hold, and
+whose process count is zero. Acknowledgement is not activity — check the build
+processes, not the acknowledgement.
