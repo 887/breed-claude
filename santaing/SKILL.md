@@ -1035,3 +1035,31 @@ The lane keeps working — classifying, committing locally, running scoped check
 **Santa's tell:** an integrator reporting a tip number ("the fifth tip", "the
 third head") rather than a result. That phrasing means it has re-verified the
 same PR repeatedly, which only happens when the branch is moving underneath it.
+
+## Separate "land smaller" from "ask me what to work on" — helpers conflate them
+
+Telling a helper its last PR was too big is normal and useful feedback. But it
+is easy to hear as *"check with me before choosing work"*, and a conscientious
+helper will start asking which task to take next — which is the opposite of what
+you wanted, and costs more than the oversized PR did.
+
+One lane spent sixteen minutes deciding whether to ask Santa which substep to
+pick, after being told its previous batch had grown too large. Its own reasoning
+had already selected correctly and needed no confirmation.
+
+**State the two separately and keep them separate:**
+
+- **Landing cadence is a rule**: open a PR every few units of work, never once
+  per session. This is Santa's to set, because only Santa sees the integration
+  queue and the cost of a deep rebase.
+- **Task selection is the lane's**: it holds the phase context and knows what is
+  mechanical versus what needs design. Santa choosing substeps is both slower
+  and worse-informed.
+
+When correcting size, say explicitly which one you are talking about — *"this is
+about how often you land, not about what you pick"* — because the helper cannot
+tell from the correction alone, and the cautious reading is the wrong one.
+
+**The general form:** any feedback that sounds like "you overstepped" invites a
+helper to narrow its autonomy in whatever direction it guesses. Name the axis
+you meant, or you will get caution in the wrong dimension.
