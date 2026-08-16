@@ -1264,3 +1264,36 @@ TUI's slash-picker consumes the first characters and the command arrives
 mangled. Confirm it took by looking for the compaction progress indicator, and
 nudge the helper back onto its task once it finishes — a compacted helper often
 needs telling what it was doing.
+
+## Age out the PR queue — a conflicting PR nobody owns will sit forever
+
+A PR that goes CONFLICTING drops out of everyone's attention at once. The
+integrator skips it (correctly — it is not mergeable). Santa's status sweep
+counts it as "with its lane". The lane has moved on to whatever Santa assigned
+next. Nobody is wrong, and nothing moves.
+
+One fleet had a 131-line docs PR sit **nine hours untouched and 157 commits
+behind trunk**, carrying the tick for the last open substep of a phase that
+therefore could not close. It only surfaced because the maintainer looked at the
+PR list and asked why two were old.
+
+**Add PR age to the status sweep**, not just state:
+
+```
+gh pr list --json number,headRefName,mergeable,updatedAt
+```
+
+An **old-and-conflicting** PR is the signal. Old-and-mergeable usually just means
+a deep queue; old-and-conflicting means nobody has touched it since trunk moved
+past it, and the gap grows on its own.
+
+**And when telling a lane to clear its backlog, enumerate the backlog yourself.**
+A lane recalls the branches it is thinking about, not the ones it forgot — which
+are exactly the ones that need clearing. Santa can see every branch; the lane can
+see the one it is standing in. Then re-check afterwards rather than assuming the
+instruction emptied it.
+
+**For a small PR with large drift, do not insist on a rebase.** Reapplying a
+hundred lines onto current trunk is often cheaper and less error-prone than
+reconciling a hundred-plus commits of history that nothing in the change depends
+on.
