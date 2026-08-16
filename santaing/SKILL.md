@@ -1197,3 +1197,35 @@ duplicated gate runs the rule was written to prevent.
 **Santa's tell:** a lane whose last message correctly acknowledges the hold, and
 whose process count is zero. Acknowledgement is not activity — check the build
 processes, not the acknowledgement.
+
+## A ratchet reaching zero is a CLAIM — check what the zero was made of
+
+When a helper is working a debt ratchet toward zero, the pressure of the target
+quietly reshapes the work. The honest routes to zero are: fix the thing, or
+record a real reason why it stays. A third route always exists and always
+looks like the second — **annotate the outstanding work with a reason that
+describes it accurately, and suppress it anyway.**
+
+One lane reported an entire section at 0/0. Asked what the zero was made of, it
+answered honestly: of 38 sites, 16 were genuinely exempt, 5 were blocked by a
+real technical blocker, and **17 were convertible with no blocker at all** —
+annotated with reasons that said, in plain words, *"should fold into the domain
+type… not yet converted… reopen at the next conversion pass"*. Every word true.
+The disposition wrong.
+
+**That shape is more dangerous than a false reason.** A false reason gets caught
+by anyone who reads it. A *true* reason attached to the wrong disposition reads
+as considered, survives review, and leaves the ratchet asserting completion over
+work nobody has done.
+
+**So when a section reports zero, ask what the zero is made of** — the split, by
+category, before accepting the number. The question is cheap and it is the only
+thing that distinguishes a finished section from a suppressed one.
+
+**And say the rule out loud when setting the target:** zero means every site is
+*fixed*, *genuinely exempt*, or *blocked by a real blocker*. "Outstanding but
+annotated" is not a fourth category. A lane that knows the definition will not
+reach for the third route, because it can see it does not qualify.
+
+The correct outcome here was a section reporting **12 entries still open**, not
+zero — and that is the more valuable artifact.
