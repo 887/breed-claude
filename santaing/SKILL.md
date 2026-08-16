@@ -1144,33 +1144,40 @@ to new work.
 flight means stop and land. A number they can check themselves survives longer
 than a judgement they have to make while deep in something else.
 
-## ONE PUSH PER PR — the only branch-freeze rule a lane can enforce without Santa
+## ALWAYS KEEP WORKING — hold a push only during the actual merge, announced by the integrator
 
 A lane that keeps pushing to its open PR while the integrator gates it destroys
-the gate run, every time. Three lanes did this in one night on one fleet, each
-costing a full re-verification while other PRs queued behind.
+that gate run. The obvious fixes are all worse than the problem:
 
-**Two rules that do not work, and why:**
+- *"Freeze the branch once handed over"* — the lane cannot see when gating starts.
+- *"Push freely, freeze when Santa says"* — Santa's poll cycle is slower than a
+  gate run, so the notice always arrives too late.
+- *"One push per PR"* — Santa tried this and it was the worst of the three: lanes
+  read it as *stop working*, and even when told otherwise they idled for
+  twenty-plus minutes per merge, waiting on a queue that had nothing to do with
+  them. It traded a few wasted gate runs for hours of dead lane time.
 
-- *"Freeze the branch once handed over."* The lane cannot tell when the
-  integrator starts gating, so it either freezes too early (idling) or not at
-  all.
-- *"Push freely; freeze when Santa says."* A gate run is fifteen to twenty
-  minutes and Santa's poll cycle is ten, so the notice reliably arrives after
-  the run is already lost. Santa is structurally too slow to be in this loop.
+**The correct rule has two halves.**
 
-**The rule that works: one push per PR.** Push the batch, leave the branch
-alone, accumulate the next batch locally, and push it after the PR merges — onto
-the next PR. A lane always knows whether it has already pushed to the branch it
-is on, so it needs no signal from anyone.
+**Lanes: always keep working, and push freely.** Never idle waiting on a merge, on
+the integrator, or on Santa. Commit locally, push a coherent batch whenever you
+have one. If you are waiting on anything, you have misread something.
 
-**The trade is deliberate and desirable**: more, smaller PRs rather than fewer
-that keep growing. That is the same direction as every other cadence rule, and
-it is what prevents a lane reaching the depth where a rebase becomes a project
-of its own.
+**The integrator announces the merge window.** Immediately before starting the
+gate for a specific PR, it messages that lane: *starting the merge of #NNN now,
+hold your push.* The lane holds only for that window — seconds to minutes — and
+resumes the moment it closes.
 
-**Santa's residual job** is only to say when a PR has merged, which is cheap and
-already part of the status sweep.
+**Why this is safe:** a competent integrator re-checks the head before merging
+anyway, so a push arriving *before* it starts costs nothing — it merges the newer
+tip. Only a push landing *mid-gate* wastes a run, and that is exactly the window
+the announcement covers.
+
+**The general lesson is about the shape of the fix.** A blanket rule that stops
+work to prevent a narrow, well-defined collision will cost more than the
+collision does. Make the exclusion window as small as the actual conflict, and
+put the duty of signalling it on whoever can see it — here, the integrator, which
+is the only party that knows when a gate begins.
 
 ## "Hold your push" reads as "stop working" — say both halves every time
 
