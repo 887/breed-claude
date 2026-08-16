@@ -1254,8 +1254,13 @@ exception.
 in the same session and compacted cleanly, the frozen one is session-specific,
 not a threshold problem. That comparison converts a guess into a finding.
 
-**Santa's move is to report, with the evidence** — the frozen value, the process
-count, how long, and the sibling comparison — and to say that manual compaction
-is the known remedy. Whether to run it on someone else's session is the
-maintainer's call, but presenting it as "wedged, here is the fix" is very
-different from "it seems idle".
+**Santa's move, once the wedge is established, is to send the compaction command
+directly** — the evidence above is what licenses it. Sitting on a dead lane
+waiting for permission costs more than the command does, and the rule that
+protects a *working* helper does not apply to one that has stopped.
+
+Send it as a slash command via bracketed paste, never plain keystrokes: the
+TUI's slash-picker consumes the first characters and the command arrives
+mangled. Confirm it took by looking for the compaction progress indicator, and
+nudge the helper back onto its task once it finishes — a compacted helper often
+needs telling what it was doing.
