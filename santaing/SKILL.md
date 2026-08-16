@@ -1229,3 +1229,33 @@ reach for the third route, because it can see it does not qualify.
 
 The correct outcome here was a section reporting **12 entries still open**, not
 zero — and that is the more valuable artifact.
+
+## Autocompact can silently fail — a frozen context is a wedge, not a pause
+
+Long-running helpers normally compact themselves and continue. Sometimes one
+does not: it sits at the compaction threshold accepting input — its context
+ticks up when you message it — while never generating and never compacting.
+Zero build processes, no output, indefinitely.
+
+**Do not treat "leave compaction alone" as absolute.** That rule exists because
+killing or compacting a helper mid-work destroys real progress, and it is right
+for that case. It is wrong for a helper that has stopped entirely. One fleet lost
+an hour of a lane's time because Santa had recorded the rule without its
+exception.
+
+**Distinguish them by evidence, not by the rule:**
+
+- *Compacting or thinking* — context still moving, a progress indicator present,
+  or build processes running. Leave it.
+- *Wedged* — the same context number for tens of minutes, zero processes, no
+  output, and it still accepts input without acting on it.
+
+**The clincher is a sibling.** If another helper crossed the same context range
+in the same session and compacted cleanly, the frozen one is session-specific,
+not a threshold problem. That comparison converts a guess into a finding.
+
+**Santa's move is to report, with the evidence** — the frozen value, the process
+count, how long, and the sibling comparison — and to say that manual compaction
+is the known remedy. Whether to run it on someone else's session is the
+maintainer's call, but presenting it as "wedged, here is the fix" is very
+different from "it seems idle".
