@@ -1063,3 +1063,29 @@ tell from the correction alone, and the cautious reading is the wrong one.
 **The general form:** any feedback that sounds like "you overstepped" invites a
 helper to narrow its autonomy in whatever direction it guesses. Name the axis
 you meant, or you will get caution in the wrong dimension.
+
+## Never restore a shared file wholesale from an older base — it silently reverts other lanes
+
+A lane rebasing its work will sometimes reach for a wholesale restore of a file
+from its own older base, to recover edits it made there. On a file only that
+lane touches, this is fine. On a **shared** file it is data loss: the restore
+says *my version is authoritative for this entire file*, and on anything several
+lanes edit — the master plan, a word list, an allow-list, a generated corpus —
+that statement is false by construction. Another lane's concurrent addition
+disappears with no conflict, no warning, and nothing in the diff that looks
+wrong unless you read it closely.
+
+One fleet hit this twice in a session, on two different shared files. The second
+time was caught only because an unrelated corpus test happened to fail on the
+lane's branch while passing on clean trunk — luck, not design.
+
+**The rule: reapply your own edits as targeted changes onto the current file.**
+Take the file at current trunk, make your specific additions, done. Never
+`restore`/`checkout` the whole file from an older revision when more than one
+lane can touch it.
+
+**Santa's angle:** shared files are the fleet's collision surface, and they are
+predictable — the ledger, the allow-lists, the generated inventories. Name them
+explicitly at briefing time and attach this rule to them, rather than waiting
+for a lane to discover it. And when a lane reports "I fixed my rebase by
+restoring X", ask what else was in X.
