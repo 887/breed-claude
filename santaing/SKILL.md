@@ -1005,3 +1005,33 @@ lanes push while it gates one PR.
 **Santa's tell:** an integrator reporting "nothing to do" while `gh pr list`
 shows open PRs. Check the real queue yourself before accepting an idle report;
 idle is sometimes correct, but "idle because I did not look" is the common case.
+
+## Whatever is being reconciled must hold still — in BOTH directions
+
+Two failure modes with one cause, and a fleet will hit both:
+
+**The lane cannot converge because trunk moves.** A deep branch finishes a
+rebase; another PR lands; the rebase is invalid. Repeat. *Remedy: the lane
+freezes itself, rebases, lands, then resumes — and lands smaller batches so it
+never gets deep enough for this to bite. Never freeze trunk.*
+
+**The integrator cannot converge because the lane moves.** The integrator
+completes a gate run on a PR; the lane pushes again; the run is invalid. Repeat.
+One fleet's integrator verified the *fifth consecutive tip* of one PR without
+ever merging it, while six mergeable PRs queued behind. *Remedy: a branch handed
+to the integrator is frozen until it merges or comes back.*
+
+The second one is easy to miss because everyone looks busy and productive — the
+lane is genuinely classifying and pushing, the integrator is genuinely gating.
+Nothing is idle and nothing lands.
+
+**State the freeze rule to the lanes explicitly, at briefing time.** Left
+unstated, a lane that keeps pushing to its open PR is doing exactly what a lane
+is supposed to do, and will keep doing it. Frame it as the same class of error
+as merging its own PR: *the branch is the integrator's while it is being gated.*
+The lane keeps working — classifying, committing locally, running scoped checks
+— it just holds the push until the PR lands.
+
+**Santa's tell:** an integrator reporting a tip number ("the fifth tip", "the
+third head") rather than a result. That phrasing means it has re-verified the
+same PR repeatedly, which only happens when the branch is moving underneath it.
