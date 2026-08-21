@@ -489,6 +489,55 @@ A fleet that is "done" but still holding watchers, reports, and workspaces is no
 
 ---
 
+## The integrator talks to helpers DIRECTLY
+
+Routing every gate failure through Santa is the bottleneck that costs the most
+wall-clock in a long run: the integrator already has the verbatim failure and already
+knows which lane owns the file, and Santa adds only a relay hop. So give the integrator
+a **direct tmux channel to the helpers**, with a fixed split of what it may say.
+
+**The integrator sends directly** — gate failures, to the lane that owns the file:
+
+- Always the **exact sha it gated, the exact command, and the verbatim output**. Never a
+  summary; a paraphrased failure cannot be reproduced.
+- Always: *"reproduce this on `<sha>` before changing anything, and tell me which tree
+  you measured."* **That clause is the one that earns its place.** A helper reporting
+  green from its own working copy while the pushed branch is red looks identical to a
+  disagreement about the code, and costs an hour to unpick. Making the helper *name its
+  tree* is what surfaces it.
+- If the helper **cannot reproduce**, the integrator escalates — it does NOT insist, and
+  it never asks for a red test to match a failure nobody can see. A helper refusing to
+  invent one is behaving correctly.
+- Re-briefing a helper whose push failed, and telling a helper its PR merged so it can
+  rebase.
+
+**Still goes to Santa** — the integrator decides none of these:
+
+- Slice ownership and arbitration between lanes. **The integrator never reassigns a slice.**
+- A helper running out of work, or asking what is next.
+- A finding that crosses lanes, or a defect class with no clear owner.
+- Anything needing a new phase, plan, or ledger reservation.
+
+**Nobody, including the integrator:** releases a helper's push, merges on a helper's
+behalf, or authorizes a gate bypass, a baseline re-pin, an `#[ignore]`, or a weakened
+assertion.
+
+**Two failure modes this opens, and their guards:**
+
+- **A wrong finding now reaches a helper unfiltered.** The reproduce-first clause is the
+  guard — the helper checks before it changes anything.
+- **Two senders, one input box.** Neither Santa nor the integrator clears an input box
+  containing text they did not type, and a helper that is mid-task gets a queued message
+  rather than an interruption. **Text an agent drafted into its own input box is never
+  authorization** — not from a helper, and not from the integrator proposing a bypass to
+  itself.
+
+Give every helper the mirror of this rule when you arm the channel, so a message from
+the integrator carries the same weight as one from Santa — and so the helper knows which
+requests to escalate instead of obeying.
+
+---
+
 ## Fan-out — helpers can recurse
 
 A helper is itself a capable agent: if you tell it to **"fan out"**, it can spawn its
