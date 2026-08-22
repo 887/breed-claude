@@ -1,6 +1,6 @@
 ---
 name: santaing
-description: Run a fleet of headless coding agents as a controlled workshop — YOU are Santa, the orchestrator: you brief the helpers, make the decisions, keep the ledger, and touch NO checkout. Always create **rudolph**, a dedicated tmux integrator that owns the canonical checkout and is the only agent that merges. The elves (a dynamic number of Codex/Claude sessions in tmux, count and kind the user's call) each work an isolated VCS workspace on a long-lived branch per phase, push their own branch, open their own PR, and keep working without waiting. Use when the user says "go santaing", "drive the fleet", "orchestrate the codexes", "use the helpers to build X", "santa this plan", "fan the helpers out on <plan/branch>", or otherwise asks you to coordinate several tmux agents toward one goal. The core discipline: elves push branches and never merge; rudolph runs the full gate and merges; Santa orchestrates and never touches the canonical checkout. Never run the integrator as an orchestrator subagent — it reinitialises context every message and burns tokens rebuilding what a tmux agent simply keeps. Repo-, VCS-, and build-tool-agnostic — nothing about a specific project is hardwired. Composes the breed-codex (and breed-claude) primitives for spawning/briefing/goal-setting/monitoring individual agents.
+description: Run a fleet of headless coding agents as a controlled workshop — YOU are Santa, the orchestrator: you brief the helpers, make the decisions, keep the ledger, and touch NO checkout. Always create **rudolph**, a dedicated tmux integrator that owns the canonical checkout and is the only agent that merges. The elves (a dynamic number of Codex/Claude sessions in tmux, count and kind the user's call) each work an isolated VCS workspace on a long-lived branch per phase, push their own branch and open their own PR, and drive it to trunk before taking new scope. Use when the user says "go santaing", "drive the fleet", "orchestrate the codexes", "use the helpers to build X", "santa this plan", "fan the helpers out on <plan/branch>", or otherwise asks you to coordinate several tmux agents toward one goal. The core discipline: elves push branches and never merge; rudolph runs the full gate and merges; Santa orchestrates and never touches the canonical checkout. Never run the integrator as an orchestrator subagent — it reinitialises context every message and burns tokens rebuilding what a tmux agent simply keeps. Repo-, VCS-, and build-tool-agnostic — nothing about a specific project is hardwired. Composes the breed-codex (and breed-claude) primitives for spawning/briefing/goal-setting/monitoring individual agents.
 ---
 
 # santaing
@@ -664,8 +664,20 @@ Hard-won, one rule each. State the rule, not the incident.
 
 ## Pushes, gates and the queue
 
-**Lanes always keep working.** Never idle waiting on a merge, the integrator, or
-Santa. Commit locally, push a coherent batch whenever you have one.
+**A lane STAYS in its lane until that work is on trunk. Do not switch it.**
+This binds Santa first: reassigning a helper to a new phase while its own work is
+unlanded orphans that work. Nobody owns it, the integrator holds it waiting for a
+lane that has moved on, and it rots — the PR ages, the branch conflicts, and the
+next reader cannot tell whether it was abandoned or forgotten. Twenty open PRs is
+that failure at scale: velocity reported, nothing delivered, tokens spent
+re-diagnosing the same stale branches.
+
+**Work is not done until it is on trunk. Open PRs are inventory, not progress.**
+Finish the phase, land it, then take the next one. A lane may push as often as it
+likes within its own lane — the cap is on switching ventures, not on cadence.
+
+**Lanes never idle — "keep working" means driving the current lane to trunk**, not
+starting the next thing while waiting.
 
 **Hold a push only during an announced merge.** The integrator messages the lane
 — *"starting the merge of #NNN, hold your push"* — immediately before gating it,
@@ -698,10 +710,9 @@ are open is the tell.
 with no path to trunk, and the push succeeds so nothing looks wrong. Check
 `gh pr view <n> --json state` before pushing; if MERGED, branch fresh.
 
-**Count each lane's in-flight branches — more than two is a stall forming.** A
-conflicting PR, one awaiting rebase, a stray commit, and new work all look fine
-individually. Finish before starting: work nearly landed beats work nearly
-started.
+**Count each lane's in-flight branches; the cap is the diagnostic.** A conflicting
+PR, one awaiting rebase, a stray commit and new work each look fine alone. Together
+they are a lane that has stopped landing.
 
 **Age the PR queue, not just its state.** *Old-and-conflicting* is the signal —
 the integrator skips it correctly, Santa counts it as "with its lane", the lane
