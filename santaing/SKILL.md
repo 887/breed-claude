@@ -38,8 +38,8 @@ That agent is **rudolph** — a dedicated tmux agent that owns the canonical che
 is the only one that merges. **Always create a rudolph.** Santa orchestrates and does
 not touch the checkout.
 
-- **Rudolph alone**: owns the canonical checkout, runs the **full `<GATE>`**, fixes gate
-  findings, and **merges**. It is the only agent that writes to `<TARGET>`.
+- **Rudolph alone**: owns the canonical checkout, runs the **full `<GATE>`**, fixes
+  *mechanical* gate findings in place (see the fix/report split below), and **merges**. It is the only agent that writes to `<TARGET>`.
 - **Santa (you)**: briefs helpers, makes decisions, keeps the ledger, and hands rudolph
   branches. **You do not touch the canonical checkout** — not `jj git fetch`, not
   `jj new`, not a rebase. Every one of those mutates shared state and will strand
@@ -152,11 +152,27 @@ Brief it once as a **standing role**, not a task. The brief must carry:
 - **Stop rather than resolve** a conflict in any shared bookkeeping file (allow-lists,
   ledgers). Those have no mechanically obvious side: one arm restores retired entries,
   the other silently drops live ones, and both produce a plausible file.
-- **Do NOT fix gate findings — report them.** Leave a PR comment with the rule name, the
-  file:line, the verbatim gate output, and what would satisfy it; tell Santa the PR
-  failed and why; move to the next branch without blocking. **A fix by rudolph teaches
-  nobody**: in one campaign the same lint was fixed by the integrator twice in an hour
-  because the lane that produced it never saw the rule. A comment reaches the author.
+- **Fix the mechanical, report the substantive — and know which is which.** The blanket
+  rule "never fix, always report" is wrong in one direction: it bounces PRs for pure
+  bookkeeping while lanes sit idle waiting on a round-trip that teaches nobody anything.
+  That does not drain the queue, it moves the wait around.
+  - **FIX IT YOURSELF, in place, then merge** — staleness caused by *trunk moving* rather
+    than by the lane; a re-merge whose only conflicts are **generated artifacts**; a
+    regenerated inventory, a fmt fix, a lockfile refresh. Anything deterministic where the
+    lane's judgement is not involved. **Never resolve a generated file by taking a side or
+    hand-editing it** — its content is a function of the tree that produced it, so any
+    merged version is fabricated evidence that parses and validates. Regenerate, always.
+    Say in the report what you fixed, so the record shows the merge carried
+    integrator-authored bytes.
+  - **REPORT IT, do not fix** — a lint or gate rule the lane *violated*; a design or
+    correctness finding; any judgement call the author is better placed to make; any shared
+    bookkeeping file where both arms of a conflict look plausible (stop and ask Santa).
+    **A fix by rudolph teaches nobody**: in one campaign the same lint was fixed by the
+    integrator twice in an hour because the lane that produced it never saw the rule.
+  - **The test between them:** *"would fixing this deprive someone of a lesson they need?"*
+    If yes, report it. If it is bytes that went stale because the world moved, fix and merge.
+  - When reporting, leave a PR comment with the rule name, the file:line, the verbatim gate
+    output, and what would satisfy it; tell Santa; move to the next branch without blocking.
   - **Carry the measurements, AND tell the lane to re-measure.** A comment naming the
     exact numbers saves the author a re-derivation — but on a **standing branch the lane
     keeps pushing to**, those numbers have a shelf life and the lane will invalidate them
@@ -164,7 +180,8 @@ Brief it once as a **standing role**, not a task. The brief must carry:
     precision into a trap: the author fixes to a figure that was true when you measured
     and is wrong when they land it.
 - **Never baseline, never gate-skip, never override** without explicit per-instance
-  authorization from Santa. Only *who fixes* changed, not *whether* it gets fixed.
+  authorization from Santa. What the fix/report split changes is only *who fixes* a
+  finding, never *whether* it gets fixed.
 - **Report BOTH outcomes** — merged and failed — to Santa and on the PR. Santa needs both
   to tell an improving lane from a repeating one.
 - **Report after each merge, not per queue** — and **report absences too**. A prediction
