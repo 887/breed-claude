@@ -578,6 +578,31 @@ its subagents' work in its own workspace and hands the single result up to you.
     composition crate, so four helpers each cold-built the world in their own
     `target/`, and thirteen workspaces reached 60 GB. The orchestrator had quoted
     this very rule at them in the same brief.
+  - **A MEASUREMENT brief is the same trap in a different costume.** "Establish the
+    current red set", "re-measure the failing population", "find out what's broken
+    now" all read to a helper as *run the whole suite*, because that is the only
+    honest way to answer them. Measured: two helpers each ran a full
+    `nextest --profile ci --no-fail-fast` in cold workspaces at the same time —
+    ~22k tests, the world compiled twice — while the orchestrator had told them in
+    the same session never to run a full sweep. Neither disobeyed; the brief asked
+    for something only a full sweep produces.
+  - **Whole-suite MEASUREMENT is the integrator's job, exactly like whole-project
+    verification.** When a phase's subject IS the suite (a "main is red" phase, a
+    post-rename sweep), rudolph runs ONE sweep in the warm canonical checkout and
+    hands back the failing set **grouped by crate**; helpers then repair scoped,
+    crate by crate. Never N helpers each deriving the same red set. Ask for the
+    grouping and for which recorded failures are already fixed versus newly
+    appeared — a single number hides the change and is what sends someone
+    re-running the sweep.
+  - **THE TELL YOU HAVE ALREADY BROKEN THIS: you are tuning capacity thresholds
+    for helpers.** Scoped checks do not thrash a machine. If you find yourself
+    setting memory or process limits, parking lanes for capacity, and recalibrating
+    when the limits misfire, stop and audit what the helpers are actually RUNNING
+    (`tmux capture-pane` and read the command, do not trust the brief). Measured:
+    four threshold revisions, five park/stop cycles and an hour of orchestrator
+    attention, all spent managing the symptom of two full sweeps that should never
+    have been briefed. The thresholds were compensation for a scope violation, and
+    every one of them eventually blocked a helper whose machine was idle.
   - **So verify dependents like this instead — report, then build ONCE.** The
     helper enumerates them (`cargo metadata` gives a real census, not a guess),
     checks only the ones that are genuinely cheap leaves, and **names the rest in
