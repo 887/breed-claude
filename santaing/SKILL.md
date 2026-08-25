@@ -434,6 +434,22 @@ It emits seven signals, and **only on a state transition**:
   speaks only on a transition, so a helper working 40 minutes produces exactly ONE
   `WORKING` line, not 40. Otherwise monitoring itself floods your context — which is
   the very problem monitoring was supposed to solve.
+- **NEVER diagnose a wedge from outside the pane. READ THE PANE.** An integrator running a
+  long gate is indistinguishable, from the process table, from one that has died: no child
+  processes it owns are recognisable, its context counter is frozen because it is *waiting*
+  rather than thinking, and trunk has not moved because nothing has merged yet. Every signal
+  says "stuck". The pane says `Regenerating <artifact> via the full oracle write (~13 min,
+  known slow). Waiting.` — which no amount of `ps` would have told you.
+  - **The three-signal test is NOT sufficient on its own.** "No process, frozen counter,
+    unchanged trunk" is the correct *screen*, but it is satisfied by a slow gate as readily
+    as by a corpse. Treat it as a reason to read the pane, never as a conclusion.
+  - **The cost of guessing wrong is asymmetric.** A wedge left alone for one more poll costs
+    minutes. Interrupting a live gate throws away a full candidate-tree build — the most
+    expensive single operation the fleet performs — and the integrator has to start over.
+    So when the two readings are consistent with the same evidence, assume the gate is alive.
+  - **Do not "nudge" an integrator you have not read.** Queued nudges pile up in its input
+    and it processes them all when the gate returns, which looks like the wedge you feared.
+
 - **`IDLE-STALL` vs `IDLE-DONE` is the whole trick.** Same observable condition (the
   pane stopped moving); the presence of the report file disambiguates *finished* from
   *gave up*. This is precisely the distinction a bare `.done` file cannot make, and
