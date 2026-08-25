@@ -36,7 +36,7 @@ shift
 TICK="${WATCH_TICK:-60}"              # seconds between polls
 IDLE_TICKS="${WATCH_IDLE_TICKS:-2}"   # debounce: codex pauses between tool calls
 DISK_MIN_G="${WATCH_DISK_MIN_G:-60}"  # free-GB floor; 3 parallel Rust builds eat a disk
-SWAP_MAX_G="${WATCH_SWAP_MAX_G:-4}"   # swap ceiling; thrashing precedes the freeze
+FREE_MIN_PCT="${WATCH_FREE_MIN_PCT:-8}"  # live free-memory floor, %. NOT swap-used: see below.
 
 STAY="${WATCH_STAY:-0}"               # 1 = never self-terminate (fleet gets reassigned)
 
@@ -98,14 +98,21 @@ resources() {
     else
         state_set __disk state ok
     fi
-    swap_m=$(sysctl -n vm.swapusage 2>/dev/null | sed -n 's/.*used = \([0-9.]*\)M.*/\1/p')
-    if [ -n "${swap_m:-}" ]; then
-        swap_g=$(awk -v m="$swap_m" 'BEGIN{printf "%d", m/1024}')
-        if [ "$swap_g" -ge "$SWAP_MAX_G" ]; then
-            transition __swap high \
-                "MEM-PRESSURE ${swap_g}G swapped (ceiling ${SWAP_MAX_G}G) — machine is thrashing"
+    # Memory pressure is measured LIVE, from free-memory percentage.
+    #
+    # Do NOT gate on `sysctl vm.swapusage` "used". On macOS swap is never
+    # reclaimed, so that number only ever climbs: a machine that was busy three
+    # hours ago and is idle now reports the same value as one thrashing right
+    # this second. Gating on it produces an alarm that cannot go back to ok,
+    # which trains the orchestrator to park lanes that are working fine.
+    free_pct=$(memory_pressure 2>/dev/null | sed -n 's/.*free percentage: *\([0-9]*\)%.*/\1/p' | tail -1)
+    if [ -n "${free_pct:-}" ]; then
+        if [ "$free_pct" -le "$FREE_MIN_PCT" ]; then
+            builders=$(ps -eo args | grep -cE 'kache rustc|bin/rustc' || true)
+            transition __mem high \
+                "MEM-PRESSURE ${free_pct}% free (floor ${FREE_MIN_PCT}%), ${builders} compilers — park a lane that already has a PR queued"
         else
-            state_set __swap state ok
+            state_set __mem state ok
         fi
     fi
 }
