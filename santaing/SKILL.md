@@ -30,6 +30,41 @@ Nothing here is tied to a specific repo, VCS, or build tool. Throughout, substit
 
 ---
 
+## Santa and rudolph DELEGATE their tool work — they must not be the thing that blocks
+
+This section applies to **Santa and rudolph only**. Elves are unaffected: they do their own
+searching, reading and editing in their own workspace, which is the whole point of having them.
+
+Santa and rudolph are the two agents everyone else waits on. Santa is the only one who relays
+findings into panes and makes rulings; rudolph is the only one who merges. Every minute either
+spends personally grepping a corpus or hand-editing a file is a minute the entire fleet is
+stalled behind a serial bottleneck — and both have long-lived context that a large tool result
+permanently occupies.
+
+**So both should delegate rather than do:**
+
+- **Avoid extensive `Glob` / `Grep` / `WebSearch` / `Bash` searching — use `Explore` agents.**
+  A broad sweep ("which crates reference this type", "where does this pattern appear", "find
+  every walk citing a missing symbol") is a fan-out an `Explore` agent runs in its own context
+  and returns as a conclusion. You keep the answer; you do not keep the file dumps.
+- **Avoid extensive `Edit` / `Bash` mutation — use `general-purpose` subagents (sonnet or
+  haiku).** Mechanical multi-site edits, batch renames, and repetitive scripted work belong in
+  a subagent. Reserve your own hands for the decisions.
+- **Use `Read` sparingly — for verifying critical claims yourself.** This is the deliberate
+  exception. When a lane or an agent reports a finding you are about to act on, read the
+  specific lines and confirm them. Independent verification of load-bearing claims is not
+  delegable; bulk reading is.
+
+**The distinction is doing versus deciding.** Searching, bulk editing and corpus reading are
+*doing*. Ruling on a finding, resolving a ledger conflict, ordering the queue, and confirming
+a claim before acting on it are *deciding*, and they stay with you.
+
+**Cheap and specific stays inline.** A single `git show <ref>:<path>`, one targeted `grep` to
+confirm a line, a process count, `git ls-remote` — these answer in seconds and delegating them
+costs more than doing them. The rule targets *extensive* work, not every invocation.
+
+---
+
 ## The one rule that defines santaing
 
 **The integration boundary is owned by exactly one agent; helpers never cross it.**
