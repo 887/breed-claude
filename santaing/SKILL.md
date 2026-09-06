@@ -639,6 +639,28 @@ its subagents' work in its own workspace and hands the single result up to you.
     <composition-crate>`** — a crate that depends on everything (a kernel, a boot
     or wiring crate, the composition root) is a whole-workspace build wearing a
     `-p` costume, and its `--all-features` graph is the entire tree.
+  - **A REGENERATION VERB IS A BUILD-THE-WORLD IN DISGUISE — it belongs to
+    rudolph, not a helper.** The forbidden list above is written in terms of
+    *flags* (`--workspace`, `--all-features`), so a project's own task verbs slip
+    past it: they read as scoped tooling, not sweeps. Measured: an oracle
+    regeneration verb compiled ~140 packages via `cargo test --no-run`; the
+    artifact-staleness checker and the dependency-ledger writer were the same
+    class. Two helpers running one concurrently put the machine at 40 compiler
+    processes and **starved the integrator's own gate — the one thing actually on
+    the critical path.**
+    - **The reason it is rudolph's is NOT that regenerating is merge work.** It
+      plainly is not. It is that **rudolph owns the one warm checkout**: its
+      build-output tree is already populated, so the same regeneration there is
+      incremental rather than cold, and it happens once instead of times-N.
+    - **The tell, since flags will not save you:** ask what the verb *compiles*,
+      not what it is named. Anything that builds the test graph, the whole
+      workspace, or a composition root to produce its output is heavy however
+      narrow its name looks.
+    - **So a helper that hits a stale generated artifact REPORTS it and holds.**
+      Santa routes the regeneration to rudolph, or clears exactly one helper to
+      run it while rudolph is idle. A helper must never start one because a gate
+      refusal implied it.
+
   - **This rule is broken by a SECOND, well-meant instruction — check every brief
     against it.** Measured: after a helper shipped an API change that broke a
     dependent crate, the orchestrator added "check every direct dependent" to the
