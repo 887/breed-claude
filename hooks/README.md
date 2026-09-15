@@ -20,6 +20,7 @@ files out.
 | `git-no-interactive.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
 | `jj-no-update-stale.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
 | `jj-no-strand.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` + a jj repo |
+| `jj-no-forget-default-workspace.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
 | `sccache-health.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` + `sccache` (Unix; no-ops on Windows) |
 
 ### `gate.py` — one registration, four gates, one process
@@ -267,6 +268,31 @@ absence of a tty**. It takes no position on commit shape, squash-merges, rebase
 policy, or branch naming — `git rebase <upstream>`, `git merge --no-ff`, and
 `git commit --amend --no-edit` all pass, because whether you *should* run them is
 the project's call, not this hook's.
+
+### `jj-no-forget-default-workspace.py` — keep the one workspace you cannot lose
+
+`jj workspace forget default` de-registers the repository's canonical workspace —
+the checkout at the repo root. jj accepts it silently, and every later jj command
+in that directory fails with `Workspace "default" doesn't have a working-copy
+commit`. Files and git are untouched, so the checkout looks healthy while jj is
+dead. Recovery is `jj op log` then `jj op revert <op>` — **not** `jj undo <op>` and
+**not** `jj op undo`, neither of which exists; both error in ways that read like a
+broken repo rather than a wrong command, and that detour is most of the damage.
+
+The real incident was a cleanup loop, not a typo. Stale per-task workspaces
+accumulate, and the obvious way to find the disposable ones is "its working copy is
+empty" — which is true of an abandoned lane **and** of a canonical checkout sitting
+idle between tasks. No inspection of the workspace can tell them apart: being the
+one everything else was forked from is not visible in its contents.
+
+Deliberately one name, one subcommand. Forgetting any other workspace is ordinary
+hygiene and passes, including a bulk forget of fifty at once — the fix the incident
+needed was never "stop cleaning up", only "keep the one you cannot lose". It does
+not try to catch forgetting the workspace you are *currently* in: that needs a
+shell-out to resolve, this gate is text-only so it can sit among the cheap ones,
+and that case is both recoverable the same way and far less costly.
+
+Override: `JJ_ALLOW_FORGET_DEFAULT_WORKSPACE=1`.
 
 ### `jj-no-update-stale.py` — make `jj workspace update-stale` a deliberate act
 
@@ -529,6 +555,7 @@ bash tests/jj-no-interactive.sh    # 50 cases
 bash tests/git-no-interactive.sh   # 119 cases
 bash tests/jj-no-update-stale.sh   # 38 cases
 bash tests/jj-no-strand.sh         # 34 cases
+bash tests/jj-no-forget-default-workspace.sh   # 32 cases
 ```
 
 Each harness invokes the **real** hook with synthetic `PreToolUse` payloads — no
