@@ -231,6 +231,49 @@ Brief it once as a **standing role**, not a task. The brief must carry:
 - **Report after each merge, not per queue** — and **report absences too**. A prediction
   that fails is as informative as one that holds.
 
+### Grant standing merge authority EARLY — Santa in the loop is the bottleneck
+
+The integrator is already the serial constraint. An integrator that must also *ask* before
+each decision is a serial constraint with a round-trip attached, and Santa becomes the
+thing the queue waits on. This is the single most expensive mistake available to Santa, and
+it is invisible while it happens: every individual approval looks like diligence.
+
+**The tell is a question the integrator could have answered itself.** "Should I retry or
+wait?", "regenerate or investigate first?", "drop this branch or hold?" — an integrator
+asking those has all the information needed to decide and is blocked on ceremony. When you
+see one, do not answer it. Grant the authority and say so.
+
+**Grant it explicitly, as a standing list**, or it will not be used:
+
+- regenerate ANY stale generated artifact the gate names (verify additive-only, commit, proceed)
+- rebuild a collection, drop a branch from it, re-merge a lane's updated tip
+- instruct lanes to rebase, fix, or push — the integrator speaks for Santa on that
+- collect several mergeable PRs and gate once, without asking
+
+**Escalate on exactly three things**, and say these are the only three:
+1. a real correctness finding — not a lint, not a stale artifact
+2. a regeneration whose diff REMOVES entries rather than adding them
+3. a conflict in a shared bookkeeping file where both arms look plausible
+
+"If you are unsure whether it qualifies, it probably does not — merge."
+
+### Do NOT re-run verification the gate already runs
+
+No pre-merge clippy, no pre-merge `check-merge`, no control runs "to be sure". **The merge
+gate IS the verification**: if it passes, merge; if it fails, fix what it named and retry.
+That loop is the whole job.
+
+Re-verifying ahead of the gate feels careful and is not. It doubles the most expensive step
+in the pipeline to re-learn something the next ten minutes would have told you — and on a
+warm tree that is 20+ minutes per repetition, paid by every PR behind it.
+
+**Where verification DOES belong is at the author's desk, before the push.** A lane running
+the full local pre-merge recipe costs one compile in one workspace; the same failure found
+at the integration boundary costs a merge-gate cycle plus a round-trip to the lane that
+wrote it. Make that a standing pre-push requirement for lanes, and never hand-type the lint
+flags — use the repo's own wrapper script, because a scoped lint run that omits
+`--all-targets` reports clean on integration-test targets it never compiled.
+
 ## Elves — count and kind are the user's call
 
 **How many elves and whether they are codex or claude is dynamic.** Ask or take the
