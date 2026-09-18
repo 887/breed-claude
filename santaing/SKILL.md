@@ -199,6 +199,15 @@ Brief it once as a **standing role**, not a task. The brief must carry:
     merged version is fabricated evidence that parses and validates. Regenerate, always.
     Say in the report what you fixed, so the record shows the merge carried
     integrator-authored bytes.
+    - **The commonest instance is a stale candidate merge tree.** The forge recomputes
+      `refs/pull/N/merge` only when the PR **branch** is pushed, never when trunk moves —
+      so after every merge, every other open PR is stale, and the gate refuses to verify a
+      tree the real merge will never produce. The fix is a push, not a lane round-trip:
+      merge trunk into the PR branch (two parents, never a rebase), push, then merge the PR
+      pinning the refreshed head. **Safe only while no lane is working that branch** — an
+      integrator push lands underneath a lane mid-rebase, the same race that eats lanes'
+      work. Confirm the lanes are idle, say so when authorizing it, and stop rather than
+      resolve if the refresh merge itself conflicts.
   - **REPORT IT, do not fix** — a lint or gate rule the lane *violated*; a design or
     correctness finding; any judgement call the author is better placed to make; any shared
     bookkeeping file where both arms of a conflict look plausible (stop and ask Santa).
@@ -720,9 +729,37 @@ its subagents' work in its own workspace and hands the single result up to you.
   worktree/checkout that would drag siblings onto another branch.
 - **Rebase `<TARGET>` onto mainline before fanning out**, and integrate onto `<TARGET>`
   — never let helpers target mainline directly.
-- **Brief via the temp-file protocol, never the cmdline.** Write the brief with a file
-  tool; `cat` it; `send-keys -l`; separate Enter. This avoids special-char mangling and
-  host-hook trigger strings.
+- **Send with `talk-to-elf.sh`, never a bare `send-keys`.** Write the brief with a file
+  tool, then `talk-to-elf.sh <session> <file>`. It refuses to submit anything it has not
+  read back off the pane, so a send either lands whole or fails loudly.
+
+  **`tmux send-keys -l` loses the FIRST few characters, not the tail.** The Claude TUI
+  routes typed keystrokes through a command/completion picker that eats them. Observed
+  live: `Read /tmp/reply.md -- full brief...` arrived as `d /tmp/reply.md -- full
+  brief...`. This is why "write it to a file and send a short pointer" is **not** a fix on
+  its own — the pointer truncates too, and a mangled one-liner is harder to notice than a
+  mangled brief. Three briefs were corrupted before an agent thought to mention it.
+
+  What the script does, each part earned by a distinct failure:
+  - **Bracketed paste** (`load-buffer` + `paste-buffer -p`) instead of `send-keys -l`. The
+    TUI treats it as paste data and does not route it through the picker.
+  - **Waits for the pane to be idle** first. Keystrokes sent into a working pane collide
+    with the agent's own self-driving input and are silently cleared or misrouted.
+  - **Reads the pane back and presses Enter only on an exact match** — comparing with all
+    whitespace stripped, because `capture-pane` hard-wraps at pane width, so a whole-line
+    `grep -F` can never match even on correct text.
+  - **Refuses rather than retrying forever.** A fragment is not self-evidently a fragment:
+    it reads as a complete instruction, carries no marker, and looks fine from the sending
+    side. Failing loudly is the entire point.
+
+  Anything over the safe paste length is left in the file and only a short fixed-length
+  pointer is typed — a pointer that does not fit cannot exist. It also avoids special-char
+  mangling and host-hook trigger strings, which the old temp-file protocol was for.
+
+  **This does not generalize for free.** It is calibrated to the Claude TUI; codex panes
+  may consume keystrokes differently. The guarantee it actually provides is narrower and
+  more useful than "sends always work": you can no longer *believe* you sent something you
+  did not.
 - **Wait for acknowledgement before setting a goal.** Confirm the helper understood the
   brief; only then `/goal`.
 - **Keep every active helper on a LIVE goal — this is how they keep working.**
