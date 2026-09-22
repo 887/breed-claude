@@ -279,7 +279,16 @@ flags — use the repo's own wrapper script, because a scoped lint run that omit
 **How many elves and whether they are codex or claude is dynamic.** Ask or take the
 user's stated preference; there is no fixed number. What is fixed is the shape:
 
-- one isolated workspace each
+- one isolated workspace each — **ONE, and they never create a second.** A lane that
+  spawns `review-<pr>`, `<lane>-design`, or `<lane>-check` workspaces for side-work and
+  leaves them behind is how a fleet goes from 6 workspaces to 61. Nearly nothing needs a
+  second checkout: `jj file show -r <rev> <path>`, `jj diff -r <rev>`, and
+  `git show <sha>:<path>` read any revision from where the lane already stands, and
+  reviewing a PR is reading a diff. Where one is genuinely unavoidable — an actual build
+  against a foreign head — it is `jj workspace forget`-ed and its directory removed the
+  moment it is done. Each carries its own multi-GB `target/`; that is the whole cost.
+  **Put this in the INITIAL brief, not as a later correction** — a lane told afterwards
+  has already left three behind.
 - **a long-lived branch per phase**, not per task — each step is the base for the next,
   and re-deriving it is how a serial lane or a multi-step migration stalls
 - before every step: fetch, rebase onto trunk, and **abandon changes that have become
