@@ -57,7 +57,12 @@ fi
 # Wait for the agent to go idle. Sending into a working pane collides with its
 # own self-driving input and the text is silently cleared or misrouted.
 waited=0
-while tmux capture-pane -t "$SESSION" -p | grep -qE 'esc to interrupt'; do
+# BUSY DETECTION IS PER-HARNESS. Codex prints 'esc to interrupt'; Claude prints a
+# spinner with a timer like '(2m 45s · ↓ 3.1k tokens)' and NEVER prints that
+# string. Matching only the Codex form makes this loop exit instantly for a
+# WORKING Claude pane, after which the Escape below interrupts its in-flight
+# tool call -- for an integrator, that is a killed merge gate.
+while tmux capture-pane -t "$SESSION" -p | grep -qE 'esc to interrupt|\([0-9]+[hms][^)]*· ↓'; do
   [ "$waited" -lt "${BUSY_WAIT:-120}" ] || die "$SESSION still busy after ${BUSY_WAIT:-120}s; not sending into a working pane"
   sleep 5; waited=$((waited+5))
 done
