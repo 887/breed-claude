@@ -62,7 +62,18 @@ waited=0
 # string. Matching only the Codex form makes this loop exit instantly for a
 # WORKING Claude pane, after which the Escape below interrupts its in-flight
 # tool call -- for an integrator, that is a killed merge gate.
-while tmux capture-pane -t "$SESSION" -p | grep -qE 'esc to interrupt|\([0-9]+[hms][^)]*· ↓'; do
+# Busy iff the LAST status marker in the pane is a live one. A finished turn's
+# "Working (… esc to interrupt)" line stays visible higher up and must not count, and a queued-
+# message block can push the live line far from the bottom, so a fixed tail window fails both ways.
+# Live: "esc to interrupt" (Codex) or the Claude spinner timer "(Ns · ↓". Done: Codex
+# "Worked for …" or Claude "… for Ns · done".
+pane_busy() {
+  tmux capture-pane -t "$SESSION" -p | awk '
+    /esc to interrupt|\([0-9]+[hms][^)]*· ↓/ { state = "busy" }
+    /Worked for [0-9]|[0-9]+[hms] · done / { state = "idle" }
+    END { exit (state == "busy") ? 0 : 1 }'
+}
+while pane_busy; do
   [ "$waited" -lt "${BUSY_WAIT:-120}" ] || die "$SESSION still busy after ${BUSY_WAIT:-120}s; not sending into a working pane"
   sleep 5; waited=$((waited+5))
 done
