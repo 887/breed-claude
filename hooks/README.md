@@ -19,6 +19,7 @@ files out.
 | `jj-no-interactive.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
 | `git-no-interactive.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
 | `jj-no-update-stale.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
+| `jj-no-undo.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
 | `jj-no-strand.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` + a jj repo |
 | `jj-no-forget-default-workspace.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` |
 | `sccache-health.py` | dispatched by `gate.py` | `~/.claude/hooks/` | `python3` + `sccache` (Unix; no-ops on Windows) |
