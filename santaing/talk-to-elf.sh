@@ -40,7 +40,7 @@ tmux has-session -t "$SESSION" 2>/dev/null || die "no tmux session: $SESSION"
 # Decide what actually gets typed.
 if [ "${#BODY}" -gt "$INLINE_MAX" ]; then
   if [ -z "$SRC_FILE" ]; then
-    SRC_FILE="$(mktemp "${TMPDIR:-/tmp}/elf-brief-${SESSION}-XXXXXX.md")"
+    SRC_FILE="$(mktemp "${TMPDIR:-/tmp}/elf-brief-${SESSION}-XXXXXX")"  # macOS mktemp only substitutes a TRAILING XXXXXX
     printf '%s\n' "$BODY" > "$SRC_FILE"
   fi
   # Absolute path so the agent can always resolve it.
