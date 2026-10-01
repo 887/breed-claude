@@ -21,7 +21,15 @@ C = {
 
 
 def ctx_window(model_id: str) -> int:
+    """Context window in tokens, from the model id.
+
+    The `[1m]` suffix is an explicit marker, but the Claude 5 family carries a
+    1M window without needing it — reporting 200k for a bare `claude-sonnet-5`
+    renders a healthy session as >100% full, which reads as a wedged agent.
+    """
     if "[1m]" in model_id or "1m" in model_id.split("-")[-1]:
+        return 1_000_000
+    if "sonnet-5" in model_id or "opus-5" in model_id:
         return 1_000_000
     return 200_000
 

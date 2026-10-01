@@ -70,6 +70,8 @@ GATES = (
     # Cheapest first: the text-only gates decide without touching the repo.
     "rg-flag-gate",
     "jj-no-update-stale",
+    "jj-no-undo",
+    "jj-no-forget-default-workspace",
     "jj-no-interactive",
     "git-no-interactive",
     # Last: these SHELL OUT, but each only for the commands it owns, so every

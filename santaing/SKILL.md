@@ -1,6 +1,6 @@
 ---
 name: santaing
-description: Run a fleet of headless coding agents as a controlled workshop — YOU are Santa, the orchestrator: you brief the helpers, make the decisions, keep the ledger, and touch NO checkout. Always create **rudolph**, a dedicated tmux integrator that owns the canonical checkout and is the only agent that merges. The elves (a dynamic number of Codex/Claude sessions in tmux, count and kind the user's call) each work an isolated VCS workspace on a long-lived branch per phase, push their own branch, open their own PR, and keep working without waiting. Use when the user says "go santaing", "drive the fleet", "orchestrate the codexes", "use the helpers to build X", "santa this plan", "fan the helpers out on <plan/branch>", or otherwise asks you to coordinate several tmux agents toward one goal. The core discipline: elves push branches and never merge; rudolph runs the full gate and merges; Santa orchestrates and never touches the canonical checkout. Never run the integrator as an orchestrator subagent — it reinitialises context every message and burns tokens rebuilding what a tmux agent simply keeps. Repo-, VCS-, and build-tool-agnostic — nothing about a specific project is hardwired. Composes the breed-codex (and breed-claude) primitives for spawning/briefing/goal-setting/monitoring individual agents.
+description: Run a fleet of headless coding agents as a controlled workshop — YOU are Santa, the orchestrator: you brief the helpers, make the decisions, keep the ledger, and touch NO checkout. Always create **rudolph**, a dedicated tmux integrator that owns the canonical checkout and is the only agent that merges. The elves (a dynamic number of Codex/Claude sessions in tmux, count and kind the user's call) each work an isolated VCS workspace on a long-lived branch per phase, push their own branch and open their own PR, and drive it to trunk before taking new scope. Use when the user says "go santaing", "drive the fleet", "orchestrate the codexes", "use the helpers to build X", "santa this plan", "fan the helpers out on <plan/branch>", or otherwise asks you to coordinate several tmux agents toward one goal. The core discipline: elves push branches and never merge; rudolph runs the full gate and merges; Santa orchestrates and never touches the canonical checkout. Never run the integrator as an orchestrator subagent — it reinitialises context every message and burns tokens rebuilding what a tmux agent simply keeps. Repo-, VCS-, and build-tool-agnostic — nothing about a specific project is hardwired. Composes the breed-codex (and breed-claude) primitives for spawning/briefing/goal-setting/monitoring individual agents.
 ---
 
 # santaing
@@ -30,6 +30,41 @@ Nothing here is tied to a specific repo, VCS, or build tool. Throughout, substit
 
 ---
 
+## Santa and rudolph DELEGATE their tool work — they must not be the thing that blocks
+
+This section applies to **Santa and rudolph only**. Elves are unaffected: they do their own
+searching, reading and editing in their own workspace, which is the whole point of having them.
+
+Santa and rudolph are the two agents everyone else waits on. Santa is the only one who relays
+findings into panes and makes rulings; rudolph is the only one who merges. Every minute either
+spends personally grepping a corpus or hand-editing a file is a minute the entire fleet is
+stalled behind a serial bottleneck — and both have long-lived context that a large tool result
+permanently occupies.
+
+**So both should delegate rather than do:**
+
+- **Avoid extensive `Glob` / `Grep` / `WebSearch` / `Bash` searching — use `Explore` agents.**
+  A broad sweep ("which crates reference this type", "where does this pattern appear", "find
+  every walk citing a missing symbol") is a fan-out an `Explore` agent runs in its own context
+  and returns as a conclusion. You keep the answer; you do not keep the file dumps.
+- **Avoid extensive `Edit` / `Bash` mutation — use `general-purpose` subagents (sonnet or
+  haiku).** Mechanical multi-site edits, batch renames, and repetitive scripted work belong in
+  a subagent. Reserve your own hands for the decisions.
+- **Use `Read` sparingly — for verifying critical claims yourself.** This is the deliberate
+  exception. When a lane or an agent reports a finding you are about to act on, read the
+  specific lines and confirm them. Independent verification of load-bearing claims is not
+  delegable; bulk reading is.
+
+**The distinction is doing versus deciding.** Searching, bulk editing and corpus reading are
+*doing*. Ruling on a finding, resolving a ledger conflict, ordering the queue, and confirming
+a claim before acting on it are *deciding*, and they stay with you.
+
+**Cheap and specific stays inline.** A single `git show <ref>:<path>`, one targeted `grep` to
+confirm a line, a process count, `git ls-remote` — these answer in seconds and delegating them
+costs more than doing them. The rule targets *extensive* work, not every invocation.
+
+---
+
 ## The one rule that defines santaing
 
 **The integration boundary is owned by exactly one agent; helpers never cross it.**
@@ -38,8 +73,8 @@ That agent is **rudolph** — a dedicated tmux agent that owns the canonical che
 is the only one that merges. **Always create a rudolph.** Santa orchestrates and does
 not touch the checkout.
 
-- **Rudolph alone**: owns the canonical checkout, runs the **full `<GATE>`**, fixes gate
-  findings, and **merges**. It is the only agent that writes to `<TARGET>`.
+- **Rudolph alone**: owns the canonical checkout, runs the **full `<GATE>`**, fixes
+  *mechanical* gate findings in place (see the fix/report split below), and **merges**. It is the only agent that writes to `<TARGET>`.
 - **Santa (you)**: briefs helpers, makes decisions, keeps the ledger, and hands rudolph
   branches. **You do not touch the canonical checkout** — not `jj git fetch`, not
   `jj new`, not a rebase. Every one of those mutates shared state and will strand
@@ -152,11 +187,36 @@ Brief it once as a **standing role**, not a task. The brief must carry:
 - **Stop rather than resolve** a conflict in any shared bookkeeping file (allow-lists,
   ledgers). Those have no mechanically obvious side: one arm restores retired entries,
   the other silently drops live ones, and both produce a plausible file.
-- **Do NOT fix gate findings — report them.** Leave a PR comment with the rule name, the
-  file:line, the verbatim gate output, and what would satisfy it; tell Santa the PR
-  failed and why; move to the next branch without blocking. **A fix by rudolph teaches
-  nobody**: in one campaign the same lint was fixed by the integrator twice in an hour
-  because the lane that produced it never saw the rule. A comment reaches the author.
+- **Fix the mechanical, report the substantive — and know which is which.** The blanket
+  rule "never fix, always report" is wrong in one direction: it bounces PRs for pure
+  bookkeeping while lanes sit idle waiting on a round-trip that teaches nobody anything.
+  That does not drain the queue, it moves the wait around.
+  - **FIX IT YOURSELF, in place, then merge** — staleness caused by *trunk moving* rather
+    than by the lane; a re-merge whose only conflicts are **generated artifacts**; a
+    regenerated inventory, a fmt fix, a lockfile refresh. Anything deterministic where the
+    lane's judgement is not involved. **Never resolve a generated file by taking a side or
+    hand-editing it** — its content is a function of the tree that produced it, so any
+    merged version is fabricated evidence that parses and validates. Regenerate, always.
+    Say in the report what you fixed, so the record shows the merge carried
+    integrator-authored bytes.
+    - **The commonest instance is a stale candidate merge tree.** The forge recomputes
+      `refs/pull/N/merge` only when the PR **branch** is pushed, never when trunk moves —
+      so after every merge, every other open PR is stale, and the gate refuses to verify a
+      tree the real merge will never produce. The fix is a push, not a lane round-trip:
+      merge trunk into the PR branch (two parents, never a rebase), push, then merge the PR
+      pinning the refreshed head. **Safe only while no lane is working that branch** — an
+      integrator push lands underneath a lane mid-rebase, the same race that eats lanes'
+      work. Confirm the lanes are idle, say so when authorizing it, and stop rather than
+      resolve if the refresh merge itself conflicts.
+  - **REPORT IT, do not fix** — a lint or gate rule the lane *violated*; a design or
+    correctness finding; any judgement call the author is better placed to make; any shared
+    bookkeeping file where both arms of a conflict look plausible (stop and ask Santa).
+    **A fix by rudolph teaches nobody**: in one campaign the same lint was fixed by the
+    integrator twice in an hour because the lane that produced it never saw the rule.
+  - **The test between them:** *"would fixing this deprive someone of a lesson they need?"*
+    If yes, report it. If it is bytes that went stale because the world moved, fix and merge.
+  - When reporting, leave a PR comment with the rule name, the file:line, the verbatim gate
+    output, and what would satisfy it; tell Santa; move to the next branch without blocking.
   - **Carry the measurements, AND tell the lane to re-measure.** A comment naming the
     exact numbers saves the author a re-derivation — but on a **standing branch the lane
     keeps pushing to**, those numbers have a shelf life and the lane will invalidate them
@@ -164,18 +224,71 @@ Brief it once as a **standing role**, not a task. The brief must carry:
     precision into a trap: the author fixes to a figure that was true when you measured
     and is wrong when they land it.
 - **Never baseline, never gate-skip, never override** without explicit per-instance
-  authorization from Santa. Only *who fixes* changed, not *whether* it gets fixed.
+  authorization from Santa. What the fix/report split changes is only *who fixes* a
+  finding, never *whether* it gets fixed.
 - **Report BOTH outcomes** — merged and failed — to Santa and on the PR. Santa needs both
   to tell an improving lane from a repeating one.
 - **Report after each merge, not per queue** — and **report absences too**. A prediction
   that fails is as informative as one that holds.
+
+### Grant standing merge authority EARLY — Santa in the loop is the bottleneck
+
+The integrator is already the serial constraint. An integrator that must also *ask* before
+each decision is a serial constraint with a round-trip attached, and Santa becomes the
+thing the queue waits on. This is the single most expensive mistake available to Santa, and
+it is invisible while it happens: every individual approval looks like diligence.
+
+**The tell is a question the integrator could have answered itself.** "Should I retry or
+wait?", "regenerate or investigate first?", "drop this branch or hold?" — an integrator
+asking those has all the information needed to decide and is blocked on ceremony. When you
+see one, do not answer it. Grant the authority and say so.
+
+**Grant it explicitly, as a standing list**, or it will not be used:
+
+- regenerate ANY stale generated artifact the gate names (verify additive-only, commit, proceed)
+- rebuild a collection, drop a branch from it, re-merge a lane's updated tip
+- instruct lanes to rebase, fix, or push — the integrator speaks for Santa on that
+- collect several mergeable PRs and gate once, without asking
+
+**Escalate on exactly three things**, and say these are the only three:
+1. a real correctness finding — not a lint, not a stale artifact
+2. a regeneration whose diff REMOVES entries rather than adding them
+3. a conflict in a shared bookkeeping file where both arms look plausible
+
+"If you are unsure whether it qualifies, it probably does not — merge."
+
+### Do NOT re-run verification the gate already runs
+
+No pre-merge clippy, no pre-merge `check-merge`, no control runs "to be sure". **The merge
+gate IS the verification**: if it passes, merge; if it fails, fix what it named and retry.
+That loop is the whole job.
+
+Re-verifying ahead of the gate feels careful and is not. It doubles the most expensive step
+in the pipeline to re-learn something the next ten minutes would have told you — and on a
+warm tree that is 20+ minutes per repetition, paid by every PR behind it.
+
+**Where verification DOES belong is at the author's desk, before the push.** A lane running
+the full local pre-merge recipe costs one compile in one workspace; the same failure found
+at the integration boundary costs a merge-gate cycle plus a round-trip to the lane that
+wrote it. Make that a standing pre-push requirement for lanes, and never hand-type the lint
+flags — use the repo's own wrapper script, because a scoped lint run that omits
+`--all-targets` reports clean on integration-test targets it never compiled.
 
 ## Elves — count and kind are the user's call
 
 **How many elves and whether they are codex or claude is dynamic.** Ask or take the
 user's stated preference; there is no fixed number. What is fixed is the shape:
 
-- one isolated workspace each
+- one isolated workspace each — **ONE, and they never create a second.** A lane that
+  spawns `review-<pr>`, `<lane>-design`, or `<lane>-check` workspaces for side-work and
+  leaves them behind is how a fleet goes from 6 workspaces to 61. Nearly nothing needs a
+  second checkout: `jj file show -r <rev> <path>`, `jj diff -r <rev>`, and
+  `git show <sha>:<path>` read any revision from where the lane already stands, and
+  reviewing a PR is reading a diff. Where one is genuinely unavoidable — an actual build
+  against a foreign head — it is `jj workspace forget`-ed and its directory removed the
+  moment it is done. Each carries its own multi-GB `target/`; that is the whole cost.
+  **Put this in the INITIAL brief, not as a later correction** — a lane told afterwards
+  has already left three behind.
 - **a long-lived branch per phase**, not per task — each step is the base for the next,
   and re-deriving it is how a serial lane or a multi-step migration stalls
 - before every step: fetch, rebase onto trunk, and **abandon changes that have become
@@ -417,6 +530,22 @@ It emits seven signals, and **only on a state transition**:
   speaks only on a transition, so a helper working 40 minutes produces exactly ONE
   `WORKING` line, not 40. Otherwise monitoring itself floods your context — which is
   the very problem monitoring was supposed to solve.
+- **NEVER diagnose a wedge from outside the pane. READ THE PANE.** An integrator running a
+  long gate is indistinguishable, from the process table, from one that has died: no child
+  processes it owns are recognisable, its context counter is frozen because it is *waiting*
+  rather than thinking, and trunk has not moved because nothing has merged yet. Every signal
+  says "stuck". The pane says `Regenerating <artifact> via the full oracle write (~13 min,
+  known slow). Waiting.` — which no amount of `ps` would have told you.
+  - **The three-signal test is NOT sufficient on its own.** "No process, frozen counter,
+    unchanged trunk" is the correct *screen*, but it is satisfied by a slow gate as readily
+    as by a corpse. Treat it as a reason to read the pane, never as a conclusion.
+  - **The cost of guessing wrong is asymmetric.** A wedge left alone for one more poll costs
+    minutes. Interrupting a live gate throws away a full candidate-tree build — the most
+    expensive single operation the fleet performs — and the integrator has to start over.
+    So when the two readings are consistent with the same evidence, assume the gate is alive.
+  - **Do not "nudge" an integrator you have not read.** Queued nudges pile up in its input
+    and it processes them all when the gate returns, which looks like the wedge you feared.
+
 - **`IDLE-STALL` vs `IDLE-DONE` is the whole trick.** Same observable condition (the
   pane stopped moving); the presence of the report file disambiguates *finished* from
   *gave up*. This is precisely the distinction a bare `.done` file cannot make, and
@@ -489,6 +618,55 @@ A fleet that is "done" but still holding watchers, reports, and workspaces is no
 
 ---
 
+## The integrator talks to helpers DIRECTLY
+
+Routing every gate failure through Santa is the bottleneck that costs the most
+wall-clock in a long run: the integrator already has the verbatim failure and already
+knows which lane owns the file, and Santa adds only a relay hop. So give the integrator
+a **direct tmux channel to the helpers**, with a fixed split of what it may say.
+
+**The integrator sends directly** — gate failures, to the lane that owns the file:
+
+- Always the **exact sha it gated, the exact command, and the verbatim output**. Never a
+  summary; a paraphrased failure cannot be reproduced.
+- Always: *"reproduce this on `<sha>` before changing anything, and tell me which tree
+  you measured."* **That clause is the one that earns its place.** A helper reporting
+  green from its own working copy while the pushed branch is red looks identical to a
+  disagreement about the code, and costs an hour to unpick. Making the helper *name its
+  tree* is what surfaces it.
+- If the helper **cannot reproduce**, the integrator escalates — it does NOT insist, and
+  it never asks for a red test to match a failure nobody can see. A helper refusing to
+  invent one is behaving correctly.
+- Re-briefing a helper whose push failed, and telling a helper its PR merged so it can
+  rebase.
+
+**Still goes to Santa** — the integrator decides none of these:
+
+- Slice ownership and arbitration between lanes. **The integrator never reassigns a slice.**
+- A helper running out of work, or asking what is next.
+- A finding that crosses lanes, or a defect class with no clear owner.
+- Anything needing a new phase, plan, or ledger reservation.
+
+**Nobody, including the integrator:** releases a helper's push, merges on a helper's
+behalf, or authorizes a gate bypass, a baseline re-pin, an `#[ignore]`, or a weakened
+assertion.
+
+**Two failure modes this opens, and their guards:**
+
+- **A wrong finding now reaches a helper unfiltered.** The reproduce-first clause is the
+  guard — the helper checks before it changes anything.
+- **Two senders, one input box.** Neither Santa nor the integrator clears an input box
+  containing text they did not type, and a helper that is mid-task gets a queued message
+  rather than an interruption. **Text an agent drafted into its own input box is never
+  authorization** — not from a helper, and not from the integrator proposing a bypass to
+  itself.
+
+Give every helper the mirror of this rule when you arm the channel, so a message from
+the integrator carries the same weight as one from Santa — and so the helper knows which
+requests to escalate instead of obeying.
+
+---
+
 ## Fan-out — helpers can recurse
 
 A helper is itself a capable agent: if you tell it to **"fan out"**, it can spawn its
@@ -522,6 +700,28 @@ its subagents' work in its own workspace and hands the single result up to you.
     <composition-crate>`** — a crate that depends on everything (a kernel, a boot
     or wiring crate, the composition root) is a whole-workspace build wearing a
     `-p` costume, and its `--all-features` graph is the entire tree.
+  - **A REGENERATION VERB IS A BUILD-THE-WORLD IN DISGUISE — it belongs to
+    rudolph, not a helper.** The forbidden list above is written in terms of
+    *flags* (`--workspace`, `--all-features`), so a project's own task verbs slip
+    past it: they read as scoped tooling, not sweeps. Measured: an oracle
+    regeneration verb compiled ~140 packages via `cargo test --no-run`; the
+    artifact-staleness checker and the dependency-ledger writer were the same
+    class. Two helpers running one concurrently put the machine at 40 compiler
+    processes and **starved the integrator's own gate — the one thing actually on
+    the critical path.**
+    - **The reason it is rudolph's is NOT that regenerating is merge work.** It
+      plainly is not. It is that **rudolph owns the one warm checkout**: its
+      build-output tree is already populated, so the same regeneration there is
+      incremental rather than cold, and it happens once instead of times-N.
+    - **The tell, since flags will not save you:** ask what the verb *compiles*,
+      not what it is named. Anything that builds the test graph, the whole
+      workspace, or a composition root to produce its output is heavy however
+      narrow its name looks.
+    - **So a helper that hits a stale generated artifact REPORTS it and holds.**
+      Santa routes the regeneration to rudolph, or clears exactly one helper to
+      run it while rudolph is idle. A helper must never start one because a gate
+      refusal implied it.
+
   - **This rule is broken by a SECOND, well-meant instruction — check every brief
     against it.** Measured: after a helper shipped an API change that broke a
     dependent crate, the orchestrator added "check every direct dependent" to the
@@ -529,6 +729,31 @@ its subagents' work in its own workspace and hands the single result up to you.
     composition crate, so four helpers each cold-built the world in their own
     `target/`, and thirteen workspaces reached 60 GB. The orchestrator had quoted
     this very rule at them in the same brief.
+  - **A MEASUREMENT brief is the same trap in a different costume.** "Establish the
+    current red set", "re-measure the failing population", "find out what's broken
+    now" all read to a helper as *run the whole suite*, because that is the only
+    honest way to answer them. Measured: two helpers each ran a full
+    `nextest --profile ci --no-fail-fast` in cold workspaces at the same time —
+    ~22k tests, the world compiled twice — while the orchestrator had told them in
+    the same session never to run a full sweep. Neither disobeyed; the brief asked
+    for something only a full sweep produces.
+  - **Whole-suite MEASUREMENT is the integrator's job, exactly like whole-project
+    verification.** When a phase's subject IS the suite (a "main is red" phase, a
+    post-rename sweep), rudolph runs ONE sweep in the warm canonical checkout and
+    hands back the failing set **grouped by crate**; helpers then repair scoped,
+    crate by crate. Never N helpers each deriving the same red set. Ask for the
+    grouping and for which recorded failures are already fixed versus newly
+    appeared — a single number hides the change and is what sends someone
+    re-running the sweep.
+  - **THE TELL YOU HAVE ALREADY BROKEN THIS: you are tuning capacity thresholds
+    for helpers.** Scoped checks do not thrash a machine. If you find yourself
+    setting memory or process limits, parking lanes for capacity, and recalibrating
+    when the limits misfire, stop and audit what the helpers are actually RUNNING
+    (`tmux capture-pane` and read the command, do not trust the brief). Measured:
+    four threshold revisions, five park/stop cycles and an hour of orchestrator
+    attention, all spent managing the symptom of two full sweeps that should never
+    have been briefed. The thresholds were compensation for a scope violation, and
+    every one of them eventually blocked a helper whose machine was idle.
   - **So verify dependents like this instead — report, then build ONCE.** The
     helper enumerates them (`cargo metadata` gives a real census, not a guess),
     checks only the ones that are genuinely cheap leaves, and **names the rest in
@@ -556,9 +781,37 @@ its subagents' work in its own workspace and hands the single result up to you.
   worktree/checkout that would drag siblings onto another branch.
 - **Rebase `<TARGET>` onto mainline before fanning out**, and integrate onto `<TARGET>`
   — never let helpers target mainline directly.
-- **Brief via the temp-file protocol, never the cmdline.** Write the brief with a file
-  tool; `cat` it; `send-keys -l`; separate Enter. This avoids special-char mangling and
-  host-hook trigger strings.
+- **Send with `talk-to-elf.sh`, never a bare `send-keys`.** Write the brief with a file
+  tool, then `talk-to-elf.sh <session> <file>`. It refuses to submit anything it has not
+  read back off the pane, so a send either lands whole or fails loudly.
+
+  **`tmux send-keys -l` loses the FIRST few characters, not the tail.** The Claude TUI
+  routes typed keystrokes through a command/completion picker that eats them. Observed
+  live: `Read /tmp/reply.md -- full brief...` arrived as `d /tmp/reply.md -- full
+  brief...`. This is why "write it to a file and send a short pointer" is **not** a fix on
+  its own — the pointer truncates too, and a mangled one-liner is harder to notice than a
+  mangled brief. Three briefs were corrupted before an agent thought to mention it.
+
+  What the script does, each part earned by a distinct failure:
+  - **Bracketed paste** (`load-buffer` + `paste-buffer -p`) instead of `send-keys -l`. The
+    TUI treats it as paste data and does not route it through the picker.
+  - **Waits for the pane to be idle** first. Keystrokes sent into a working pane collide
+    with the agent's own self-driving input and are silently cleared or misrouted.
+  - **Reads the pane back and presses Enter only on an exact match** — comparing with all
+    whitespace stripped, because `capture-pane` hard-wraps at pane width, so a whole-line
+    `grep -F` can never match even on correct text.
+  - **Refuses rather than retrying forever.** A fragment is not self-evidently a fragment:
+    it reads as a complete instruction, carries no marker, and looks fine from the sending
+    side. Failing loudly is the entire point.
+
+  Anything over the safe paste length is left in the file and only a short fixed-length
+  pointer is typed — a pointer that does not fit cannot exist. It also avoids special-char
+  mangling and host-hook trigger strings, which the old temp-file protocol was for.
+
+  **This does not generalize for free.** It is calibrated to the Claude TUI; codex panes
+  may consume keystrokes differently. The guarantee it actually provides is narrower and
+  more useful than "sends always work": you can no longer *believe* you sent something you
+  did not.
 - **Wait for acknowledgement before setting a goal.** Confirm the helper understood the
   brief; only then `/goal`.
 - **Keep every active helper on a LIVE goal — this is how they keep working.**
@@ -615,8 +868,20 @@ Hard-won, one rule each. State the rule, not the incident.
 
 ## Pushes, gates and the queue
 
-**Lanes always keep working.** Never idle waiting on a merge, the integrator, or
-Santa. Commit locally, push a coherent batch whenever you have one.
+**A lane STAYS in its lane until that work is on trunk. Do not switch it.**
+This binds Santa first: reassigning a helper to a new phase while its own work is
+unlanded orphans that work. Nobody owns it, the integrator holds it waiting for a
+lane that has moved on, and it rots — the PR ages, the branch conflicts, and the
+next reader cannot tell whether it was abandoned or forgotten. Twenty open PRs is
+that failure at scale: velocity reported, nothing delivered, tokens spent
+re-diagnosing the same stale branches.
+
+**Work is not done until it is on trunk. Open PRs are inventory, not progress.**
+Finish the phase, land it, then take the next one. A lane may push as often as it
+likes within its own lane — the cap is on switching ventures, not on cadence.
+
+**Lanes never idle — "keep working" means driving the current lane to trunk**, not
+starting the next thing while waiting.
 
 **Hold a push only during an announced merge.** The integrator messages the lane
 — *"starting the merge of #NNN, hold your push"* — immediately before gating it,
@@ -649,10 +914,9 @@ are open is the tell.
 with no path to trunk, and the push succeeds so nothing looks wrong. Check
 `gh pr view <n> --json state` before pushing; if MERGED, branch fresh.
 
-**Count each lane's in-flight branches — more than two is a stall forming.** A
-conflicting PR, one awaiting rebase, a stray commit, and new work all look fine
-individually. Finish before starting: work nearly landed beats work nearly
-started.
+**Count each lane's in-flight branches; the cap is the diagnostic.** A conflicting
+PR, one awaiting rebase, a stray commit and new work each look fine alone. Together
+they are a lane that has stopped landing.
 
 **Age the PR queue, not just its state.** *Old-and-conflicting* is the signal —
 the integrator skips it correctly, Santa counts it as "with its lane", the lane
