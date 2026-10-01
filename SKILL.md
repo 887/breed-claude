@@ -54,8 +54,8 @@ Given a personality name `<P>`:
    ```
 
    Examples:
-   - `$HOME=/home/laragana`, `PWD=/home/laragana/workspace` → `bat (home-workspace)`
-   - `PWD=/home/laragana/workspace/personalities` → `bat (home-workspace-personalities)`
+   - `PWD=$HOME/workspace` → `bat (home-workspace)`
+   - `PWD=$HOME/workspace/personalities` → `bat (home-workspace-personalities)`
    - `PWD=$HOME` exactly → `bat (home)`
    - `PWD` outside `$HOME` (rare) → falls back to dash-joined absolute path; substitution simply doesn't fire and the leading dash is stripped.
 
@@ -237,11 +237,13 @@ Walk this ladder until a target is identified. **Always confirm with the user be
 
 4. **Live `claude` process whose conversation log is most-recently-touched and contains `<P>`-coded markers.** When `--name` isn't set on the process cmdline (older Claudes started without that flag, or `--resume <named-token>` aliases), find the conversation log by:
    ```bash
-   # Find the project dir for the workspace the process is in
-   readlink /proc/<pid>/cwd
-   # → /home/laragana/workspace
+   # Find the project dir for the workspace the process is in.
+   # Linux: /proc; macOS (no /proc): lsof.
+   cwd=$(readlink /proc/<pid>/cwd 2>/dev/null \
+         || lsof -a -p <pid> -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)
+   # → $HOME/workspace
    project_dir=$(echo "$cwd" | sed 's|/|-|g')
-   # → -home-laragana-workspace
+   # → -Users-<user>-workspace (macOS) / -home-<user>-workspace (Linux)
    # Find the most recently modified jsonl in that project — biggest current writer
    ls -t ~/.claude/projects/<project_dir>/*.jsonl | head -3
    # Verify <P>-coded content (personality activation, animal-coded vocab):
