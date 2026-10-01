@@ -83,7 +83,6 @@ link_in "$SRC/jj-no-update-stale.py"           "$HOME/.claude/hooks"
 link_in "$SRC/jj-no-undo.py"                   "$HOME/.claude/hooks"
 link_in "$SRC/jj-no-strand.py"               "$HOME/.claude/hooks"
 link_in "$SRC/jj-no-forget-default-workspace.py" "$HOME/.claude/hooks"
-link_in "$SRC/jj-no-edit-on-pushed.py"       "$HOME/.claude/hooks"
 link_in "$SRC/tests/gate.sh"                "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/rg-flag-gate.sh"        "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/jj-no-interactive.sh"   "$HOME/.claude/hooks/tests"
@@ -92,7 +91,6 @@ link_in "$SRC/tests/jj-no-update-stale.sh"     "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/jj-no-undo.sh"             "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/jj-no-strand.sh"         "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/jj-no-forget-default-workspace.sh" "$HOME/.claude/hooks/tests"
-link_in "$SRC/tests/jj-no-edit-on-pushed.sh" "$HOME/.claude/hooks/tests"
 
 command -v python3 >/dev/null 2>&1 || echo "WARNING: python3 not on PATH — every hook here needs it"
 
@@ -162,7 +160,6 @@ Then verify:
   bash ~/.claude/hooks/tests/jj-no-undo.sh
   bash ~/.claude/hooks/tests/jj-no-strand.sh
   bash ~/.claude/hooks/tests/jj-no-forget-default-workspace.sh
-  bash ~/.claude/hooks/tests/jj-no-edit-on-pushed.sh
   /hooks     (in-session; gate.py should be listed. Hooks hot-reload — if one is
              missing, that is real wiring breakage, not a stale session)
 SNIPPET
