@@ -295,6 +295,31 @@ user's stated preference; there is no fixed number. What is fixed is the shape:
   empty** — an empty change post-rebase is work that landed, not work lost
 - after a step: push the branch, open or update the PR, **and immediately continue**
 
+**No invisible work, ever. A long-running lane pushes at least every 30 minutes, to a
+draft PR that carries its name.** This is what lets the user and Santa read fleet state
+from the PR list alone, instead of asking or inspecting workspaces.
+
+- **Every branch a lane touches has an open DRAFT PR from the start.** Its title is
+  prefixed `[<lane-name>]`, e.g. `[elf3] ACT.10: …`. A branch with no PR is invisible work.
+- **Push every finished commit at least every 30 minutes**, red proofs included, using the
+  repo's sanctioned gate skip for WIP pushes. The full gate still runs on the final push
+  and on merge.
+- **The PR's draft state is the hand-off signal.**
+  - Draft = the owning lane is working on it. Nobody else touches it, and the verifier
+    and merger skip it.
+  - Ready = the lane is done; the pre-gate verifier and then the merger take it.
+  - The lane flips it back to draft the moment it changes the PR again, including when
+    it fixes a bounced finding.
+  - A verifier that bounces a finding flips the PR back to draft too.
+  - The verifier and merger act only on non-draft PRs, at the head they verified.
+- **The `[<lane-name>]` prefix means ownership until merge.** The lane keeps the PR while
+  the verifier checks it, and while it waits parked on a dependency.
+  - Only when the lane truly leaves the PR for good, retitle it `[unowned] …` and add an
+    `unowned` label.
+  - The PR list then answers "who has this?" and "what needs an owner?" on its own.
+- **Put this in the INITIAL brief**, and repeat it on every reassignment. Without it,
+  lanes accumulate hours of local-only commits that only a workspace inspection reveals.
+
 **Give each long-running phase a PERMANENT lane.** A phase that keeps getting picked up
 and put down is re-derived every time; a permanent lane keeps the map in its head. Where
 phases build on each other, this matters twice over:
