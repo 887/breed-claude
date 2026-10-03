@@ -14,6 +14,10 @@ check "claude bg terminal" 0 '· 1 background terminal running · /ps to view'
 check "claude shell+mon"   0 '⏵⏵ bypass permissions on · 1 shell, 1 monitor'
 check "claude monitor msg" 0 'Brewed for 4m 54s · 1 shell, 1 monitor still running'
 check "codex bash running" 0 '⎿  Running… (10s · timeout 10m)'
+check "codex slow-model notice" 0 '  Giving this request a little extra thought
+› 1. Dismiss and keep waiting
+  2. Learn more
+  No action is required. Codex will keep waiting, and this menu will close when the response is ready.'
 # MUST NOT match (lane is genuinely idle)
 check "claude idle prompt" 1 '❯ 
   Opus 5 (1M context) │ foundlings-elf5 │ ctx 205k/1.00M (21%) │ wk 21% used'

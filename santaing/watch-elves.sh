@@ -62,7 +62,11 @@ BENIGN_RE='Update available! *Run:'
 # Match instead on the three things Claude shows only while live: the streaming
 # token counter, an in-flight Bash tool, and the backgrounding hint printed
 # beside it. Verified against a real Claude lane mid-run and at an idle prompt.
-WORKING_RE='esc to interrupt|Working \(|· ↓ [0-9]|Running… \(|ctrl\+b ctrl\+b|background terminal|[0-9]+ shells?|[0-9]+ monitors?'
+WORKING_RE='esc to interrupt|Working \(|· ↓ [0-9]|Running… \(|ctrl\+b ctrl\+b|background terminal|[0-9]+ shells?|[0-9]+ monitors?|No action is required|menu will close when the response is ready'
+# Codex's slow-model notice ("Giving this request a little extra thought" + a
+# "Retry with a faster model" menu) blocks nothing: it says "No action is required"
+# and closes itself when the reply lands. It counts as WORKING, which outranks
+# DIALOG, so it no longer emits a DIALOG/WORKING pair on every slow reply.
 # `N shell` / `N monitor` were added 2026-08-14 after a THIRD false IDLE: a Claude
 # lane waiting on a cold compile with a Monitor armed shows no spinner at all —
 # it had already printed its progress and was blocked on a background job — but
