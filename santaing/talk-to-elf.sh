@@ -81,6 +81,20 @@ done
 [ "$waited" -gt 0 ] && printf 'talk-to-elf: waited %ds for %s to go idle\n' "$waited" "$SESSION" >&2
 
 attempt=0
+# CODEX TRANSCRIPT-BROWSE TRAP. In Codex, Escape on an empty composer (and
+# especially Escape twice) enters "Browsing transcript" mode, whose footer reads
+# "↵ rewind · esc back". An Enter there REWINDS the conversation to an old
+# message and throws away everything after it. The vim-mode Escape below and the
+# retry Escape can put a Codex pane into that mode. So: leave it with ONE Escape
+# whenever it shows, and never press Enter while it shows.
+in_browse() { tmux capture-pane -t "$SESSION" -p | grep -qE 'Browsing transcript|↵ rewind'; }
+leave_browse() {
+  local n=0
+  while in_browse; do
+    n=$((n+1)); [ "$n" -le 3 ] || die "$SESSION stuck in Codex transcript-browse mode; NOT sending (Enter would rewind)"
+    tmux send-keys -t "$SESSION" Escape; sleep 0.6
+  done
+}
 while : ; do
   attempt=$((attempt+1))
   [ "$attempt" -le "$RETRIES" ] || die "input never matched after $RETRIES attempts; NOT submitting a fragment"
@@ -88,6 +102,7 @@ while : ; do
   # Equalize prompt mode (vim-mode agents), then clear the input line.
   tmux send-keys -t "$SESSION" Escape
   sleep 0.2
+  leave_browse
   tmux send-keys -t "$SESSION" C-u
   sleep 0.2
 
@@ -111,6 +126,7 @@ while : ; do
   PANE="$(tmux capture-pane -t "$SESSION" -p | tr -d '[:space:]')"
   WANT="$(printf '%s' "$LINE" | tr -d '[:space:]')"
   if printf '%s' "$PANE" | grep -qF -- "$WANT"; then
+    in_browse && die "$SESSION is in Codex transcript-browse mode; refusing Enter (it would rewind)"
     tmux send-keys -t "$SESSION" Enter
     printf 'talk-to-elf: %s VERIFIED and submitted [%s]\n' "$SESSION" "$MODE"
     exit 0
@@ -118,6 +134,8 @@ while : ; do
 
   printf 'talk-to-elf: %s attempt %d did NOT match; clearing and retrying\n' "$SESSION" "$attempt" >&2
   tmux send-keys -t "$SESSION" Escape
+  sleep 0.3
+  leave_browse
   tmux send-keys -t "$SESSION" C-u
   sleep 0.5
 done
