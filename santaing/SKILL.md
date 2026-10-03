@@ -317,6 +317,10 @@ from the PR list alone, instead of asking or inspecting workspaces.
   - Only when the lane truly leaves the PR for good, retitle it `[unowned] …` and add an
     `unowned` label.
   - The PR list then answers "who has this?" and "what needs an owner?" on its own.
+- **One active PR per lane.** A lane whose PR is ready but not yet merged is NOT free.
+  It holds the PR, fixes whatever the verifier bounces, and gets its next scope only once
+  the PR MERGES. Briefing new scope early leaves two half-owned PRs and splits the lane's
+  attention between them.
 - **Put this in the INITIAL brief**, and repeat it on every reassignment. Without it,
   lanes accumulate hours of local-only commits that only a workspace inspection reveals.
 
