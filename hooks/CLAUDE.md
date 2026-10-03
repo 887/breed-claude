@@ -13,7 +13,10 @@ Check `gate.py`'s own routing (it reads `tool_input.command` and runs `GATES`
 against it) before assuming a hook that exists is active.
 
 Do not widen `settings.json`'s matcher to add tool names, and do not add a
-second entry to the `PreToolUse` array. `gate.py` runs on Bash only — not on
-file edits. If a new gate needs a different `tool_name` or payload shape, ask
+second entry to the `PreToolUse` array beyond the two that exist: `gate.py` on
+Bash, and `jj-no-edit-on-pushed.py` on file edits (Claude Code's
+`Edit|Write|NotebookEdit|MultiEdit`, Codex's `apply_patch`). The edit hook is
+installed by the user's decision (2026-10-03): it guards editing while `@` is a
+pushed commit, which only an edit matcher can see. If a new gate needs a different `tool_name` or payload shape, ask
 the user before changing *how* gate.py decides what to run, not just *whether*
 to run something.

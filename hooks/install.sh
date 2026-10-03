@@ -83,6 +83,7 @@ link_in "$SRC/jj-no-update-stale.py"           "$HOME/.claude/hooks"
 link_in "$SRC/jj-no-undo.py"                   "$HOME/.claude/hooks"
 link_in "$SRC/jj-no-strand.py"               "$HOME/.claude/hooks"
 link_in "$SRC/jj-no-forget-default-workspace.py" "$HOME/.claude/hooks"
+link_in "$SRC/jj-no-edit-on-pushed.py"         "$HOME/.claude/hooks"
 link_in "$SRC/tests/gate.sh"                "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/rg-flag-gate.sh"        "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/jj-no-interactive.sh"   "$HOME/.claude/hooks/tests"
@@ -91,6 +92,7 @@ link_in "$SRC/tests/jj-no-update-stale.sh"     "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/jj-no-undo.sh"             "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/jj-no-strand.sh"         "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/jj-no-forget-default-workspace.sh" "$HOME/.claude/hooks/tests"
+link_in "$SRC/tests/jj-no-edit-on-pushed.sh"   "$HOME/.claude/hooks/tests"
 
 command -v python3 >/dev/null 2>&1 || echo "WARNING: python3 not on PATH — every hook here needs it"
 
@@ -139,11 +141,23 @@ cat <<'SNIPPET'
 Now merge the registration by hand (this script will not touch settings.json).
 
 ~/.claude/settings.json:
-  { "hooks": { "PreToolUse": [ { "matcher": "Bash", "hooks": [
-    { "type": "command", "command": "python3 $HOME/.claude/hooks/gate.py" }
-  ] } ] } }
+  { "hooks": { "PreToolUse": [
+    { "matcher": "Bash", "hooks": [
+      { "type": "command", "command": "python3 $HOME/.claude/hooks/gate.py" } ] },
+    { "matcher": "Edit|Write|NotebookEdit|MultiEdit", "hooks": [
+      { "type": "command", "command": "python3 $HOME/.claude/hooks/jj-no-edit-on-pushed.py" } ] }
+  ] } }
 
-ONE entry, not one per gate. Claude Code runs each registered hook as its own
+~/.codex/hooks.json (Codex reports every file edit as `apply_patch`):
+  { "hooks": { "PreToolUse": [
+    { "matcher": "^Bash$", "hooks": [
+      { "type": "command", "command": "python3 \"$HOME/.claude/hooks/gate.py\"", "timeout": 30 } ] },
+    { "matcher": "^apply_patch$", "hooks": [
+      { "type": "command", "command": "python3 \"$HOME/.claude/hooks/jj-no-edit-on-pushed.py\"", "timeout": 30 } ] }
+  ] } }
+  Codex asks you to trust a new or changed hook once per session start.
+
+ONE Bash entry, not one per gate. Claude Code runs each registered hook as its own
 process on EVERY Bash call, so four registrations meant four python3 spawns:
 measured 68 ms per call, against 27 ms for the dispatcher. gate.py imports the
 same four gates in-process and pays interpreter startup once.
@@ -160,6 +174,7 @@ Then verify:
   bash ~/.claude/hooks/tests/jj-no-undo.sh
   bash ~/.claude/hooks/tests/jj-no-strand.sh
   bash ~/.claude/hooks/tests/jj-no-forget-default-workspace.sh
+  bash ~/.claude/hooks/tests/jj-no-edit-on-pushed.sh
   /hooks     (in-session; gate.py should be listed. Hooks hot-reload — if one is
              missing, that is real wiring breakage, not a stale session)
 SNIPPET
