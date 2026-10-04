@@ -326,6 +326,10 @@ from the PR list alone, instead of asking or inspecting workspaces.
   - Only when the lane truly leaves the PR for good, retitle it `[unowned] …` and add an
     `unowned` label.
   - The PR list then answers "who has this?" and "what needs an owner?" on its own.
+- **Speed mode: lanes run NO cargo at all** (no test, check, clippy or build). They write code,
+  push, and mark the PR ready. The integrator compiles, tests and gates in its WARM checkout and
+  bounces the exact errors back to the lane. N cold lane builds waste N times the machine; the
+  warm integrator pays once.
 - **Full-workspace sweeps run ONCE, at the end of a lane.** While prerequisite PRs are still
   open, a lane runs scoped checks only (touched crates, focused tests). It never re-runs
   workspace-wide checks that it already knows fail on another PR's work: each run burns
