@@ -81,7 +81,12 @@ pane_busy() {
 # 60 minutes on one). Queue mode skips the Escape/C-u below too, because Escape
 # INTERRUPTS a working Codex turn. Claude panes keep the wait: typing into a busy
 # Claude pane collides with its self-driving input.
-is_codex() { tmux capture-pane -t "$SESSION" -p | grep -qE '← for agents|Ask Codex to do anything'; }
+# The pane's foreground process is the reliable signal; the footer text can scroll off
+# or be replaced while a long tool call renders.
+is_codex() {
+  [ "$(tmux display-message -t "$SESSION" -p '#{pane_current_command}' 2>/dev/null)" = codex ] && return 0
+  tmux capture-pane -t "$SESSION" -p | grep -qE '← for agents|Ask Codex to do anything'
+}
 QUEUE=0
 if pane_busy && is_codex && [ "${NO_QUEUE:-0}" != 1 ]; then
   QUEUE=1
