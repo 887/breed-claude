@@ -74,10 +74,23 @@ pane_busy() {
     /Worked for [0-9]|[0-9]+[hms] · done / { state = "idle" }
     END { exit (state == "busy") ? 0 : 1 }'
 }
-while pane_busy; do
-  [ "$waited" -lt "${BUSY_WAIT:-120}" ] || die "$SESSION still busy after ${BUSY_WAIT:-120}s; not sending into a working pane"
-  sleep 5; waited=$((waited+5))
-done
+# CODEX QUEUES INPUT WHILE BUSY. A message submitted into a working Codex pane is
+# held as "Messages to be submitted after next tool call" and delivered between
+# tool calls, without interrupting anything. So a busy Codex pane is not waited
+# on (an always-busy integrator would otherwise never be reachable: a send sat
+# 60 minutes on one). Queue mode skips the Escape/C-u below too, because Escape
+# INTERRUPTS a working Codex turn. Claude panes keep the wait: typing into a busy
+# Claude pane collides with its self-driving input.
+is_codex() { tmux capture-pane -t "$SESSION" -p | grep -qE '← for agents|Ask Codex to do anything'; }
+QUEUE=0
+if pane_busy && is_codex && [ "${NO_QUEUE:-0}" != 1 ]; then
+  QUEUE=1
+else
+  while pane_busy; do
+    [ "$waited" -lt "${BUSY_WAIT:-120}" ] || die "$SESSION still busy after ${BUSY_WAIT:-120}s; not sending into a working pane"
+    sleep 5; waited=$((waited+5))
+  done
+fi
 [ "$waited" -gt 0 ] && printf 'talk-to-elf: waited %ds for %s to go idle\n' "$waited" "$SESSION" >&2
 
 attempt=0
@@ -99,12 +112,17 @@ while : ; do
   attempt=$((attempt+1))
   [ "$attempt" -le "$RETRIES" ] || die "input never matched after $RETRIES attempts; NOT submitting a fragment"
 
-  # Equalize prompt mode (vim-mode agents), then clear the input line.
-  tmux send-keys -t "$SESSION" Escape
-  sleep 0.2
-  leave_browse
-  tmux send-keys -t "$SESSION" C-u
-  sleep 0.2
+  # Equalize prompt mode (vim-mode agents), then clear the input line. Skipped in
+  # queue mode: Escape would interrupt the working Codex turn.
+  if [ "$QUEUE" = 0 ]; then
+    tmux send-keys -t "$SESSION" Escape
+    sleep 0.2
+    leave_browse
+    tmux send-keys -t "$SESSION" C-u
+    sleep 0.2
+  else
+    leave_browse
+  fi
 
   # Deliver via BRACKETED PASTE, never `send-keys -l`.
   #
@@ -128,14 +146,20 @@ while : ; do
   if printf '%s' "$PANE" | grep -qF -- "$WANT"; then
     in_browse && die "$SESSION is in Codex transcript-browse mode; refusing Enter (it would rewind)"
     tmux send-keys -t "$SESSION" Enter
-    printf 'talk-to-elf: %s VERIFIED and submitted [%s]\n' "$SESSION" "$MODE"
+    if [ "$QUEUE" = 1 ]; then
+      printf 'talk-to-elf: %s busy (Codex) — VERIFIED and QUEUED for its next tool call [%s]\n' "$SESSION" "$MODE"
+    else
+      printf 'talk-to-elf: %s VERIFIED and submitted [%s]\n' "$SESSION" "$MODE"
+    fi
     exit 0
   fi
 
   printf 'talk-to-elf: %s attempt %d did NOT match; clearing and retrying\n' "$SESSION" "$attempt" >&2
-  tmux send-keys -t "$SESSION" Escape
-  sleep 0.3
-  leave_browse
+  if [ "$QUEUE" = 0 ]; then
+    tmux send-keys -t "$SESSION" Escape
+    sleep 0.3
+    leave_browse
+  fi
   tmux send-keys -t "$SESSION" C-u
   sleep 0.5
 done
