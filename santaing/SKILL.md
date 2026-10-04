@@ -314,8 +314,12 @@ from the PR list alone, instead of asking or inspecting workspaces.
   - The verifier and merger act only on non-draft PRs, at the head they verified.
 - **The PR description is a STATUS CHECKLIST, not prose.** Every item of the lane gets one
   line, done or open (`- [x]` / `- [ ]`). The lane replaces WIP paragraphs with it and keeps
-  it current: tick items as they land, at least on every push. Anyone can then read a PR's
-  state at a glance without asking the lane or reading its pane.
+  it current: tick items as they land, at least every 30 minutes. Anyone can then read a
+  PR's state at a glance without asking the lane or reading its pane.
+  - **Tick with `santaing/pr-tick.sh <pr> "<item text>"`** (`--undo` to untick). GitHub has
+    no per-checkbox API, and even the web UI rewrites the whole body on a click. The script
+    does that round trip, so a tick costs the lane one short command instead of reading and
+    re-writing its description. A vague match that hits zero or several lines is refused.
 - **The `[<lane-name>]` prefix means ownership until merge.** The lane keeps the PR while
   the verifier checks it, and while it waits parked on a dependency.
   - Only when the lane truly leaves the PR for good, retitle it `[unowned] …` and add an
