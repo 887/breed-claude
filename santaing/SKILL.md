@@ -326,6 +326,13 @@ from the PR list alone, instead of asking or inspecting workspaces.
   - Only when the lane truly leaves the PR for good, retitle it `[unowned] …` and add an
     `unowned` label.
   - The PR list then answers "who has this?" and "what needs an owner?" on its own.
+- **Full-workspace sweeps run ONCE, at the end of a lane.** While prerequisite PRs are still
+  open, a lane runs scoped checks only (touched crates, focused tests). It never re-runs
+  workspace-wide checks that it already knows fail on another PR's work: each run burns
+  wallclock and slows every other lane and the merge gate.
+- **A big lane splits its serial, mechanical work out for freed lanes**, in batches, as
+  "Split-off candidates" in its PR, so other lanes code those batches in parallel while it
+  keeps the work only it can do.
 - **A lane STAYS ON ITS LANE UNTIL ITS WORK IS MERGED. One active PR per lane.** A lane
   whose PR is ready but not yet merged is NOT free. It holds the PR, fixes whatever the
   verifier bounces, and gets its next scope only once the PR MERGES.
