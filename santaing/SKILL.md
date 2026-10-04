@@ -312,6 +312,10 @@ from the PR list alone, instead of asking or inspecting workspaces.
     it fixes a bounced finding.
   - A verifier that bounces a finding flips the PR back to draft too.
   - The verifier and merger act only on non-draft PRs, at the head they verified.
+- **The PR description is a STATUS CHECKLIST, not prose.** Every item of the lane gets one
+  line, done or open (`- [x]` / `- [ ]`). The lane replaces WIP paragraphs with it and keeps
+  it current: tick items as they land, at least on every push. Anyone can then read a PR's
+  state at a glance without asking the lane or reading its pane.
 - **The `[<lane-name>]` prefix means ownership until merge.** The lane keeps the PR while
   the verifier checks it, and while it waits parked on a dependency.
   - Only when the lane truly leaves the PR for good, retitle it `[unowned] …` and add an
