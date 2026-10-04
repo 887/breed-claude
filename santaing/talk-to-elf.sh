@@ -92,6 +92,9 @@ if pane_busy && is_codex && [ "${NO_QUEUE:-0}" != 1 ]; then
   QUEUE=1
 else
   while pane_busy; do
+    # A pane that turns busy after the first check (e.g. it just took a previous
+    # message) is still a Codex pane: queue instead of waiting it out.
+    if is_codex && [ "${NO_QUEUE:-0}" != 1 ]; then QUEUE=1; break; fi
     [ "$waited" -lt "${BUSY_WAIT:-120}" ] || die "$SESSION still busy after ${BUSY_WAIT:-120}s; not sending into a working pane"
     sleep 5; waited=$((waited+5))
   done
