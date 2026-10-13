@@ -40,6 +40,21 @@ FREE_MIN_PCT="${WATCH_FREE_MIN_PCT:-8}"  # live free-memory floor, %. NOT swap-u
 
 STAY="${WATCH_STAY:-0}"               # 1 = never self-terminate (fleet gets reassigned)
 
+# OPT-IN: resume a lane stalled on the provider's model-capacity error, silently.
+# The stall is the provider's, not the lane's: nothing needs deciding, so waking the
+# orchestrator for it wastes its tokens. With WATCH_AUTORESUME=1 the watcher sends
+# `/goal resume` (at most once per WATCH_RESUME_GAP seconds per lane), logs one line
+# to WATCH_RESUME_LOG, and emits NOTHING. It speaks up only when WATCH_RESUME_MAX
+# resumes in a row did not get the lane working again (STUCK), because then a
+# human-grade decision is needed. Only a pane showing BOTH "Goal stalled" and the
+# capacity error is touched: any other stall still surfaces as IDLE. Never switches
+# models. Default off: modes are opt-in.
+AUTORESUME="${WATCH_AUTORESUME:-0}"
+RESUME_GAP="${WATCH_RESUME_GAP:-180}"
+RESUME_MAX="${WATCH_RESUME_MAX:-12}"
+RESUME_LOG="${WATCH_RESUME_LOG:-$REPORT_DIR/auto-resume.log}"
+TALK="${WATCH_TALK:-$(cd "$(dirname "$0")" && pwd)/talk-to-elf.sh}"
+
 STATE_DIR="${WATCH_STATE_DIR:-${TMPDIR:-/tmp}/santa-watch-$$}"
 mkdir -p "$STATE_DIR"
 
@@ -194,6 +209,29 @@ while true; do
             continue
         fi
 
+        # Capacity stall: resume silently (opt-in, see AUTORESUME above) and skip
+        # the classification, so the stalled pane is not counted as an idle tick.
+        if [ "$AUTORESUME" = 1 ] \
+            && printf '%s' "$pane" | grep -q 'Goal stalled' \
+            && printf '%s' "$pane" | grep -q 'Selected model is at capacity'; then
+            now=$(date +%s)
+            if [ $(( now - $(state_get "$s" resumed_at 0) )) -ge "$RESUME_GAP" ]; then
+                n=$(( $(state_get "$s" resumes 0) + 1 ))
+                state_set "$s" resumes "$n"
+                state_set "$s" resumed_at "$now"
+                # A failed send is retried after the gap; the STUCK count below
+                # surfaces a lane that never recovers.
+                "$TALK" "$s" -m "/goal resume" > /dev/null 2>&1 || true
+                printf '%s auto-resumed %s (model at capacity) #%s\n' "$(date -u +%H:%M:%SZ)" "$s" "$n" >> "$RESUME_LOG"
+            fi
+            if [ "$(state_get "$s" resumes 0)" -ge "$RESUME_MAX" ]; then
+                transition "$s" capacity-stuck \
+                    "STUCK $s — $RESUME_MAX auto-resumes in a row did not clear the model-capacity stall; read the pane"
+            fi
+            state_set "$s" idle 0
+            continue
+        fi
+
         # A session that is visibly working cannot be blocked on a modal, so the
         # WORKING signal outranks a DIALOG match. Without this the two are decided
         # by check ORDER alone, and a benign banner anywhere in the pane silently
@@ -202,6 +240,7 @@ while true; do
         if printf '%s' "$pane" | grep -qE "$WORKING_RE"; then
             transition "$s" working "WORKING $s"
             state_set "$s" idle 0
+            state_set "$s" resumes 0
         elif printf '%s' "$dialog_pane" | grep -qE "$DIALOG_RE"; then
             transition "$s" dialog \
                 "DIALOG $s :: $(printf '%s' "$dialog_pane" | grep -oE "$DIALOG_RE" | head -1) — send the keypress"

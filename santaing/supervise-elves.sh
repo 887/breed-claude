@@ -34,6 +34,18 @@ emit() {  # one line -> stdout (an event) and the durable log
   printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$line" >> "$LOG"
 }
 
+# OPT-IN HB_QUIET=1: heartbeats go to the log only, not stdout. Every stdout line
+# wakes the orchestrator, so a heartbeat every HB_EVERY seconds costs a turn for
+# nothing. Liveness is then read from the log: its last HEARTBEAT line older than
+# ~2 x HB_EVERY means the supervisor is dead. Default off (an event per beat).
+heartbeat() {
+  if [ "${HB_QUIET:-0}" = 1 ]; then
+    printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$1" >> "$LOG"
+  else
+    emit "$1"
+  fi
+}
+
 emit "SUPERVISOR-UP watching ${SESSIONS[*]} (heartbeat ${HB_EVERY}s, log $LOG)"
 
 last_hb=$(date +%s)
@@ -52,7 +64,7 @@ while true; do
 
   now=$(date +%s)
   if [ $((now - last_hb)) -ge "$HB_EVERY" ]; then
-    emit "HEARTBEAT supervisor alive, ${restarts} watcher restart(s)"
+    heartbeat "HEARTBEAT supervisor alive, ${restarts} watcher restart(s)"
     last_hb=$now
   fi
 done &
@@ -66,7 +78,7 @@ while kill -0 "$SUPERVISED" 2>/dev/null; do
   for s in "${SESSIONS[@]}"; do
     tmux has-session -t "$s" 2>/dev/null && alive=$((alive + 1))
   done
-  emit "HEARTBEAT $alive/${#SESSIONS[@]} sessions alive"
+  heartbeat "HEARTBEAT $alive/${#SESSIONS[@]} sessions alive"
 done
 
 emit "SUPERVISOR-DOWN inner loop exited"

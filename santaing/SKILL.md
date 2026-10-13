@@ -564,6 +564,25 @@ alive before you end a turn, not merely that you started one; the harness-side
 task can die while the shell process lingers, so a process count is not proof.
 The log is.
 
+**Two opt-in modes keep the monitor from waking the orchestrator for nothing**
+(both default off; every stdout line is a turn):
+
+- `WATCH_AUTORESUME=1` — a lane whose pane shows both `Goal stalled` and
+  `Selected model is at capacity` is resumed (`/goal resume`) by the watcher itself,
+  at most once per `WATCH_RESUME_GAP` (180 s), logged to
+  `$WATCH_RESUME_LOG` (default `<report-dir>/auto-resume.log`), and **not emitted**.
+  It speaks only as `STUCK <lane>` when `WATCH_RESUME_MAX` (12) resumes in a row did
+  not get the lane working again. Any other stall still surfaces as `IDLE`. It never
+  switches models.
+- `HB_QUIET=1` (supervisor) — heartbeats go to the log, not stdout. Read liveness
+  from the log: no `HEARTBEAT` line newer than ~2 x `HB_EVERY` means it is dead.
+
+```bash
+WATCH_AUTORESUME=1 HB_QUIET=1 HB_EVERY=600 <skill-dir>/supervise-elves.sh <report-dir> codex codex2
+```
+
+Test: `tests/autoresume.sh` (both directions, fake `tmux`, nothing real touched).
+
 It emits seven signals, and **only on a state transition**:
 
 | Event | Trigger | Your response |
