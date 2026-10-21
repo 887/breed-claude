@@ -66,9 +66,13 @@ check "resume is logged to the resume log"   0 'grep -q "auto-resumed elfA" "$W/
 check "resume emits NO event line"           1 'grep -q "resum" "$W/on.out"'
 check "a resumed lane is not reported IDLE"  1 'grep -q "IDLE" "$W/on.out"'
 
-# 2. Same pane, mode OFF (the default): nothing is sent.
-run_watch off "$CAPACITY_PANE" 4
+# 2. Same pane, mode explicitly OFF: nothing is sent.
+run_watch off "$CAPACITY_PANE" 4 WATCH_AUTORESUME=0
 check "mode off sends nothing"               0 '[ "$(calls)" -eq 0 ]'
+
+# 2b. Same pane, variable UNSET: auto-resume is the default.
+run_watch default "$CAPACITY_PANE" 5 WATCH_RESUME_GAP=3
+check "default (unset) resumes"              0 '[ "$(calls)" -ge 1 ]'
 
 # 3. A different stall, mode ON: never resumed, and it still surfaces as IDLE.
 run_watch other "$OTHER_PANE" 5 WATCH_AUTORESUME=1 WATCH_RESUME_GAP=1

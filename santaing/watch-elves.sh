@@ -40,16 +40,16 @@ FREE_MIN_PCT="${WATCH_FREE_MIN_PCT:-8}"  # live free-memory floor, %. NOT swap-u
 
 STAY="${WATCH_STAY:-0}"               # 1 = never self-terminate (fleet gets reassigned)
 
-# OPT-IN: resume a lane stalled on the provider's model-capacity error, silently.
+# DEFAULT ON: resume a lane stalled on the provider's model-capacity error, silently.
 # The stall is the provider's, not the lane's: nothing needs deciding, so waking the
-# orchestrator for it wastes its tokens. With WATCH_AUTORESUME=1 the watcher sends
+# orchestrator for it wastes its tokens. By default (WATCH_AUTORESUME=1) the watcher sends
 # `/goal resume` (at most once per WATCH_RESUME_GAP seconds per lane), logs one line
 # to WATCH_RESUME_LOG, and emits NOTHING. It speaks up only when WATCH_RESUME_MAX
 # resumes in a row did not get the lane working again (STUCK), because then a
 # human-grade decision is needed. Only a pane showing BOTH "Goal stalled" and the
 # capacity error is touched: any other stall still surfaces as IDLE. Never switches
-# models. Default off: modes are opt-in.
-AUTORESUME="${WATCH_AUTORESUME:-0}"
+# models. Default ON (owner order); set WATCH_AUTORESUME=0 to opt out.
+AUTORESUME="${WATCH_AUTORESUME:-1}"
 RESUME_GAP="${WATCH_RESUME_GAP:-180}"
 RESUME_MAX="${WATCH_RESUME_MAX:-12}"
 RESUME_LOG="${WATCH_RESUME_LOG:-$REPORT_DIR/auto-resume.log}"
