@@ -53,6 +53,7 @@ AUTORESUME="${WATCH_AUTORESUME:-1}"
 RESUME_GAP="${WATCH_RESUME_GAP:-180}"
 RESUME_MAX="${WATCH_RESUME_MAX:-12}"
 RESUME_LOG="${WATCH_RESUME_LOG:-$REPORT_DIR/auto-resume.log}"
+mkdir -p "$(dirname "$RESUME_LOG")" 2>/dev/null || true   # default-on mode must not depend on the caller pre-creating the dir
 TALK="${WATCH_TALK:-$(cd "$(dirname "$0")" && pwd)/talk-to-elf.sh}"
 
 STATE_DIR="${WATCH_STATE_DIR:-${TMPDIR:-/tmp}/santa-watch-$$}"

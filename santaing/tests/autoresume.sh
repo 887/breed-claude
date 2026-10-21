@@ -66,6 +66,11 @@ check "resume is logged to the resume log"   0 'grep -q "auto-resumed elfA" "$W/
 check "resume emits NO event line"           1 'grep -q "resum" "$W/on.out"'
 check "a resumed lane is not reported IDLE"  1 'grep -q "IDLE" "$W/on.out"'
 
+# 1b. Resume log in a directory that does not exist yet: created, no error line.
+run_watch nodir "$CAPACITY_PANE" 5 WATCH_RESUME_GAP=3 WATCH_RESUME_LOG="$W/missing/dir/resume.log"
+check "missing log dir is created"           0 '[ -f "$W/missing/dir/resume.log" ]'
+check "no write-error line is emitted"       1 'grep -q "No such file" "$W/nodir.out"'
+
 # 2. Same pane, mode explicitly OFF: nothing is sent.
 run_watch off "$CAPACITY_PANE" 4 WATCH_AUTORESUME=0
 check "mode off sends nothing"               0 '[ "$(calls)" -eq 0 ]'
