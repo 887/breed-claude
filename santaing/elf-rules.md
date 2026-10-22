@@ -33,6 +33,6 @@ Standing rules for every helper (elf) in a santaing fleet. Santa points each elf
   2. `python3 tools/scripts/format_workspace.py --check`
   3. `cargo run --locked --quiet -p foundlings-lint-sweep --bin lint`
   4. `cargo run --locked --quiet -p foundlings-dependency-graph --bin dependency-graph`
-  5. `cargo xtask facts --check` and `cargo xtask doc-truth --check`
+  5. `cargo xtask schema-gen --check`, `cargo xtask facts --check` and `cargo xtask doc-truth --check` (on a schema-gen failure run `cargo xtask schema-gen` and commit the regenerated files)
   6. `tools/scripts/clippy.sh -p <every crate you touched>`
 - After any dependency or feature change: `cargo hakari generate && cargo hakari manage-deps --yes`.
