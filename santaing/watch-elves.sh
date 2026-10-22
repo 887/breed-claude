@@ -97,7 +97,13 @@ WORKING_RE='esc to interrupt|Working \(|· ↓ [0-9]|Running… \(|ctrl\+b ctrl\
 # single 4-minute nextest run. The background-terminal text persists for the whole
 # tool call, so it does not flicker.
 
-emit() { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
+# Every emitted line wakes the orchestrator, so by default only actionable events are
+# printed: a transition back to WORKING is news to nobody. WATCH_SHOW_WORKING=1 restores it.
+SHOW_WORKING="${WATCH_SHOW_WORKING:-0}"
+emit() {
+  case "$1" in "WORKING "*) [ "$SHOW_WORKING" = 1 ] || return 0 ;; esac
+  printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*"
+}
 
 state_get() { cat "$STATE_DIR/$1.$2" 2>/dev/null || echo "$3"; }
 state_set() { printf '%s' "$3" > "$STATE_DIR/$1.$2"; }
