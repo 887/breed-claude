@@ -71,6 +71,10 @@ DIALOG_RE='Press enter to confirm|Update available|Do you trust|Allow command|Re
 # reader to skip the one real DIALOG when it comes. Stripped before matching, so
 # codex's genuinely blocking update PROMPT still fires.
 BENIGN_RE='Update available! *Run:'
+# A Codex lane can raise a question (a choice list answered with shift+arrow)
+# while a background terminal keeps the pane looking busy. The goal then waits
+# on that answer, so QUESTION outranks WORKING.
+QUESTION_RE='shift\+← to answer|[0-9]+ questions? *$'
 # Codex prints one of these while a tool call is in flight.
 # Claude Code prints NONE of them: its spinner is a RANDOMISED gerund
 # ("Blanching…", "Drizzling…", "Sauteed…"), so there is no stable word to match
@@ -244,7 +248,11 @@ while true; do
         # by check ORDER alone, and a benign banner anywhere in the pane silently
         # outvotes live evidence of progress.
         dialog_pane=$(printf '%s' "$pane" | grep -vE "$BENIGN_RE")
-        if printf '%s' "$pane" | grep -qE "$WORKING_RE"; then
+        if printf '%s' "$pane" | grep -qE "$QUESTION_RE"; then
+            transition "$s" question \
+                "QUESTION $s — the lane asked a question and waits on the answer; read the pane and answer it"
+            state_set "$s" idle 0
+        elif printf '%s' "$pane" | grep -qE "$WORKING_RE"; then
             transition "$s" working "WORKING $s"
             state_set "$s" idle 0
             state_set "$s" resumes 0
