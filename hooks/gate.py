@@ -69,6 +69,7 @@ HERE = Path(__file__).resolve().parent
 GATES = (
     # Cheapest first: the text-only gates decide without touching the repo.
     "rg-flag-gate",
+    "find-root-gate",
     "jj-no-update-stale",
     "jj-no-undo",
     "jj-no-forget-default-workspace",

@@ -77,6 +77,7 @@ link_in() {         # link_in <src-file> <dest-dir>
 echo "user-scope hooks:"
 link_in "$SRC/gate.py"                      "$HOME/.claude/hooks"
 link_in "$SRC/rg-flag-gate.py"              "$HOME/.claude/hooks"
+link_in "$SRC/find-root-gate.py"            "$HOME/.claude/hooks"
 link_in "$SRC/jj-no-interactive.py"         "$HOME/.claude/hooks"
 link_in "$SRC/git-no-interactive.py"        "$HOME/.claude/hooks"
 link_in "$SRC/jj-no-update-stale.py"           "$HOME/.claude/hooks"
@@ -86,6 +87,7 @@ link_in "$SRC/jj-no-forget-default-workspace.py" "$HOME/.claude/hooks"
 link_in "$SRC/jj-no-edit-on-pushed.py"         "$HOME/.claude/hooks"
 link_in "$SRC/tests/gate.sh"                "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/rg-flag-gate.sh"        "$HOME/.claude/hooks/tests"
+link_in "$SRC/tests/find-root-gate.sh"      "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/jj-no-interactive.sh"   "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/git-no-interactive.sh"  "$HOME/.claude/hooks/tests"
 link_in "$SRC/tests/jj-no-update-stale.sh"     "$HOME/.claude/hooks/tests"
@@ -168,6 +170,7 @@ And, for the status line (same file, separate key):
 Then verify:
   bash ~/.claude/hooks/tests/gate.sh          # the dispatcher
   bash ~/.claude/hooks/tests/rg-flag-gate.sh
+  bash ~/.claude/hooks/tests/find-root-gate.sh
   bash ~/.claude/hooks/tests/jj-no-interactive.sh
   bash ~/.claude/hooks/tests/git-no-interactive.sh
   bash ~/.claude/hooks/tests/jj-no-update-stale.sh
