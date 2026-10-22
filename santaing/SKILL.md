@@ -276,6 +276,11 @@ flags — use the repo's own wrapper script, because a scoped lint run that omit
 
 ## Elves — count and kind are the user's call
 
+**Every elf brief points at [`elf-rules.md`](elf-rules.md)** (shipped next to this
+file): draft PR at start, progress checklist, own workspace only, one build
+configuration, targeted tests, one verification pass, and the gate's cheap steps
+before ready. Repeat the pointer on every reassignment.
+
 **How many elves and whether they are codex or claude is dynamic.** Ask or take the
 user's stated preference; there is no fixed number. What is fixed is the shape:
 
