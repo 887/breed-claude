@@ -9,19 +9,20 @@ Standing rules for every helper (elf) in a santaing fleet. Santa points each elf
 3. **Keep it current.** Tick items as they land and move steps from TODO to DONE as you go. Push after each step, so the PR always shows where you are.
 4. **Taking over a PR:** add your label and rewrite its checklist as your plan.
 5. **Never hold work local-only.** If you're pulled off a task: push, tick what's done, and leave a handover comment (done with change ids, exact next step, what was running). A gate or build hold blocks only compiling; commit and push compile nothing.
-6. **Ready means your code change is done.** Never put "run clippy/tests" or "regenerate" TODOs in a PR body: the merge gate runs clippy and tests, and the integrator regenerates at merge.
+6. **One active PR per elf.** A PR you can't progress because it waits on another PR or item gets the `inactive` label (keep your elf label) and a body line `Blocked on: #N / ITEM`. Remove `inactive` as soon as the blocker lands and resume it before starting anything new. A PR you're simply not working on goes `unowned` so a free elf can take it over.
+7. **Ready means your code change is done.** Never put "run clippy/tests" or "regenerate" TODOs in a PR body: the merge gate runs clippy and tests, and the integrator regenerates at merge.
 
 ## Workspace
 
-7. **Your own workspace only.** Never create new workspaces or worktrees: each one cold-compiles a full `target/` and fills the disk. Switch tasks inside your own workspace.
+8. **Your own workspace only.** Never create new workspaces or worktrees: each one cold-compiles a full `target/` and fills the disk. Switch tasks inside your own workspace.
 
 ## Builds and tests
 
-8. **No holds:** no load ceilings, no build tokens, no gate holds. Build and test whenever needed, and never abort a running build.
-9. **One cargo command at a time, one build configuration** (the test wrapper's defaults). No extra profiles, `--all-features` or `--target` unless that specific test needs it: each combination recompiles everything.
-10. **Targeted tests only.** List only the crates that contain your test cases, filter to the exact cases you changed (`test(...)`, never whole `package(...)`), and use the expensive profile only for cases that really need its setup.
-11. **One verification pass, then ready.** Merge main, run your targeted tests once, fix real failures, push, mark ready. No test loops: the merge gate catches the rest.
-12. **Before marking ready, run the merge gate's cheap steps** on your branch merged with current main, and fix what they find. The integrator's workspace-wide checks stay with the gate.
+9. **No holds:** no load ceilings, no build tokens, no gate holds. Build and test whenever needed, and never abort a running build.
+10. **One cargo command at a time, one build configuration** (the test wrapper's defaults). No extra profiles, `--all-features` or `--target` unless that specific test needs it: each combination recompiles everything.
+11. **Targeted tests only.** List only the crates that contain your test cases, filter to the exact cases you changed (`test(...)`, never whole `package(...)`), and use the expensive profile only for cases that really need its setup.
+12. **One verification pass, then ready.** Merge main, run your targeted tests once, fix real failures, push, mark ready. No test loops: the merge gate catches the rest.
+13. **Before marking ready, run the merge gate's cheap steps** on your branch merged with current main, and fix what they find. The integrator's workspace-wide checks stay with the gate.
 
 ## Foundlings commands
 
