@@ -26,6 +26,7 @@ Standing rules for every helper (elf) in a santaing fleet. Santa points each elf
 
 ## Foundlings commands
 
+- Ledger sync: before `qew pr open`/`qew pr ready`, `qew status` must show `unpushed=0`; otherwise `qew push` (a write that never reached the remote is invisible to the integrator).
 - Ledger and PRs: `qew pr open <item> --head <bookmark> --base main --body-file F`, `qew pr label N --add <elf>`, `qew pr check N ITEM`, `qew pr body N --body-file F`, `qew pr ready N`. Checkbox line: `- [ ] ITEM (#issue): title <!-- pr-progress:ITEM -->`.
 - Workspace: `.claude/worktrees/foundlings-elfN`; switch tasks with `jj new <base>`.
 - Tests: `tools/scripts/nextest.sh` with its defaults; `--profile ci` only for cases that load native plugin artifacts.
