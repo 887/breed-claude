@@ -39,5 +39,6 @@ Standing rules for every helper (elf) in a santaing fleet. Santa points each elf
   5. `cargo xtask schema-gen --check`, `cargo xtask facts --check` and `cargo xtask doc-truth --check` (on a schema-gen failure run `cargo xtask schema-gen` and commit the regenerated files)
   6. `cargo run --locked --quiet --package foundlings-plugin-verb-link-gate --bin plugin-verb-link-gate` (a plugin must not link another owner's implementation crate)
   7. `python3 tools/scripts/member_feature_policy.py` (if you touched Cargo features)
-  8. `tools/scripts/clippy.sh -p <every crate you touched>`
+  8. `cargo xtask verb-walk-oracle --check` when you add or edit walks (debt may only fall: compare against clean main)
+  9. `tools/scripts/clippy.sh -p <every crate you touched>`
 - After any dependency or feature change: `cargo hakari generate && cargo hakari manage-deps --yes`.
