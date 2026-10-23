@@ -10,6 +10,7 @@ Standing rules for every helper (elf) in a santaing fleet. Santa points each elf
 4. **Taking over a PR:** add your label and rewrite its checklist as your plan.
 5. **Never hold work local-only.** If you're pulled off a task: push, tick what's done, and leave a handover comment (done with change ids, exact next step, what was running). A gate or build hold blocks only compiling; commit and push compile nothing.
 6. **One active PR per elf.** A PR you can't progress because it waits on another PR or item gets the `inactive` label (keep your elf label) and a body line `Blocked on: #N / ITEM`. Remove `inactive` as soon as the blocker lands and resume it before starting anything new. A PR you're simply not working on goes `unowned` so a free elf can take it over.
+6a. **Open-PR cap.** While the repo has more open PRs than the cap Santa sets (default 6), never start a new item. Finish your own PRs first; if all of yours are blocked, take over a stalled PR (draft with no recent push, or `unowned`) or split a big one into finishable parts. New work starts only when the count is back under the cap.
 7. **Ready means your code change is done.** Never put "run clippy/tests" or "regenerate" TODOs in a PR body: the merge gate runs clippy and tests, and the integrator regenerates at merge.
 
 ## Workspace
