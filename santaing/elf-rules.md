@@ -22,7 +22,7 @@ Standing rules for every helper (elf) in a santaing fleet. Santa points each elf
 ## Builds and tests
 
 9. **No holds:** no load ceilings, no build tokens, no gate holds. Build and test whenever needed, and never abort a running build.
-10. **One cargo command at a time, one build configuration** (the test wrapper's defaults). No extra profiles, `--all-features` or `--target` unless that specific test needs it: each combination recompiles everything.
+10. **One cargo command at a time, one build configuration** (the test wrapper's defaults). No extra profiles, `--all-features` or `--target` unless that specific test needs it: each combination recompiles everything. Check-only and clippy runs go through `tools/scripts/cargo-check.sh` and `tools/scripts/clippy.sh` (the gate's flags, target dir and environment, so a repeat run is near-zero work); a bare `cargo check` or `cargo clippy` is refused by the repo hook because its different flags warm nothing the gate reuses.
 11. **Targeted tests only.** List only the crates that contain your test cases, filter to the exact cases you changed (`test(...)`, never whole `package(...)`), and use the expensive profile only for cases that really need its setup.
 12. **One verification pass, then ready.** Merge main, run your targeted tests once, fix real failures, push, mark ready. No test loops: the merge gate catches the rest.
 13. **Before marking ready, run the merge gate's cheap steps** on your branch merged with current main, and fix what they find. The integrator's workspace-wide checks stay with the gate.
