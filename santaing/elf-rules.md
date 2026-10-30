@@ -22,7 +22,7 @@ Standing rules for every helper (elf) in a santaing fleet. Santa points each elf
 ## Builds and tests
 
 9. **No holds:** no load ceilings, no build tokens, no gate holds. Build and test whenever needed, and never abort a running build.
-10. **One cargo command at a time, one build configuration** (the test wrapper's defaults). No extra profiles, `--all-features` or `--target` unless that specific test needs it: each combination recompiles everything. Check-only and clippy runs go through `tools/scripts/cargo-check.sh` and `tools/scripts/clippy.sh` (the gate's flags, target dir and environment, so a repeat run is near-zero work); a bare `cargo check` or `cargo clippy` is refused by the repo hook because its different flags warm nothing the gate reuses.
+10. **One cargo command at a time, one build configuration** (the test wrapper's defaults). No extra profiles, `--all-features` or `--target` unless that specific test needs it: each combination recompiles everything. Check-only and clippy runs go through `tools/scripts/cargo_check.py` and `tools/scripts/clippy.py` (the gate's flags, target dir and environment, so a repeat run is near-zero work); a bare `cargo check` or `cargo clippy` is refused by the repo hook because its different flags warm nothing the gate reuses.
 11. **Targeted tests only.** List only the crates that contain your test cases, filter to the exact cases you changed (`test(...)`, never whole `package(...)`), and use the expensive profile only for cases that really need its setup.
 12. **One verification pass, then ready.** Merge main, run your targeted tests once, fix real failures, push, mark ready. No test loops: the merge gate catches the rest.
 13. **Before marking ready, run the merge gate's cheap steps** on your branch merged with current main, and fix what they find. The integrator's workspace-wide checks stay with the gate.
@@ -32,7 +32,7 @@ Standing rules for every helper (elf) in a santaing fleet. Santa points each elf
 - Ledger sync: before `qew pr open`/`qew pr ready`, `qew status` must show `unpushed=0`; otherwise `qew push` (a write that never reached the remote is invisible to the integrator).
 - Ledger and PRs: `qew pr open <item> --head <bookmark> --base main --body-file F`, `qew pr label N --add <elf>`, `qew pr check N ITEM`, `qew pr body N --body-file F`, `qew pr ready N`; blocking: `qew pr block N --by M [--by M2]`, `qew pr unblock N [--by M]` (merging M unblocks automatically). Checkbox line: `- [ ] ITEM (#issue): title <!-- pr-progress:ITEM -->`.
 - Workspace: `.claude/worktrees/foundlings-elfN`; switch tasks with `jj new <base>`.
-- Tests: `tools/scripts/nextest.sh` with its defaults; `--profile ci` only for cases that load native plugin artifacts.
+- Tests: `tools/scripts/nextest.py` with its defaults; `--profile ci` only for cases that load native plugin artifacts.
 - Cheap gate steps before `qew pr ready`:
   1. `cargo hakari verify && cargo hakari manage-deps --dry-run`
   2. `python3 tools/scripts/format_workspace.py --check`
@@ -42,5 +42,6 @@ Standing rules for every helper (elf) in a santaing fleet. Santa points each elf
   6. `cargo run --locked --quiet --package foundlings-plugin-verb-link-gate --bin plugin-verb-link-gate` (a plugin must not link another owner's implementation crate)
   7. `python3 tools/scripts/member_feature_policy.py` (if you touched Cargo features)
   8. `cargo xtask verb-walk-oracle --check` when you add or edit walks (debt may only fall: compare against clean main)
-  9. `tools/scripts/clippy.sh -p <every crate you touched>`
+  9. `tools/scripts/clippy.py -p <every crate you touched>`
 - After any dependency or feature change: `cargo hakari generate && cargo hakari manage-deps --yes`.
+- New or changed library crate: if `src/tests/mod.rs` is empty, set `[lib] test = false` (else `test-tier-gate` fails). A new edge from a test suite (or test crate) onto `foundlings-verb-catalogue` needs a `# crate-dep-edge: allow --hub-impl--> <crate>` marker with reason + reopen in that Cargo.toml (else the crate-dep-edge lint fails).
