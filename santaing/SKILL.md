@@ -857,6 +857,13 @@ its subagents' work in its own workspace and hands the single result up to you.
   worktree/checkout that would drag siblings onto another branch.
 - **Rebase `<TARGET>` onto mainline before fanning out**, and integrate onto `<TARGET>`
   — never let helpers target mainline directly.
+- **An assignment is a GOAL, not a message: use `set-elf-goal.sh <session> <brief-file>`.** A
+  plain message never changes a Codex elf's `/goal`, so it keeps pursuing the old one and falls
+  back to it every turn; a `/goal ...` longer than talk-to-elf's inline limit is sent as a file
+  pointer and never runs as a command. The script sends a short real `/goal` that points at the
+  brief file, presses Enter on the "Replace goal?" menu only when that menu's objective names the
+  brief, and exits 0 only once the footer shows a fresh "Pursuing goal" naming the brief (else
+  exit 1 with the last footer). Put the full assignment in the brief file; keep the path short.
 - **Send with `talk-to-elf.sh`, never a bare `send-keys`.** Write the brief with a file
   tool, then `talk-to-elf.sh <session> <file>`. It refuses to submit anything it has not
   read back off the pane, so a send either lands whole or fails loudly.
